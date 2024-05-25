@@ -55,15 +55,56 @@ char *keywords_strings[] = {
     [_IMAGINARY] = "_Imaginary"
 };
 
-// Maps punctuator enums to their character representations
-char punctuator_strings[] = {
-    [LEFT_PARENTHESIS] = '(',
-    [RIGHT_PARENTHESIS] = ')',
-    [PLUS] = '+',
-    [LEFT_BRACE] = '{',
-    [RIGHT_BRACE] = '}',
-    [FWD_SLASH] = '/',
-    [SEMICOLON] = ';'
+// Maps punctuator enums to their string representations
+char *punctuator_strings[] = {
+    [LEFT_SQUARE_BRACKET] = "[",
+    [RIGHT_SQUARE_BRACKET] = "]",
+    [LEFT_PARENTHESIS] = "(",
+    [RIGHT_PARENTHESIS] = ")",
+    [LEFT_BRACE] = "{",
+    [RIGHT_BRACE] = "}",
+    [DOT] = ".",
+    [ARROW] = "->",
+    [INCREMENT] = "++",
+    [DECREMENT] = "--",
+    [AMPERSAND] = "&",
+    [ASTERISK] = "*",
+    [PLUS] = "+",
+    [MINUS] = "-",
+    [TILDE] = "~",
+    [EXCLIMATION_MARK] = "!",
+    [FWD_SLASH] = "/",
+    [REMAINDER] = "%",
+    [LEFT_BITSHIFT] = "<<",
+    [RIGHT_BITSHIFT] = ">>",
+    [LESS_THAN] = "<",
+    [GREATER_THAN] = ">",
+    [LESS_THAN_EQUAL] = "<=",
+    [GREATER_THAN_EQUAL] = ">=",
+    [EQUALITY] = "==",
+    [INEQUALITY] = "!=",
+    [BITWISE_XOR] = "^",
+    [BITWISE_OR] = "|",
+    [LOGICAL_AND] = "&&",
+    [LOGICAL_OR] = "||",
+    [QUESTION_MARK] = "?",
+    [COLON] = ":",
+    [SEMICOLON] = ";",
+    [ELLIPSIS] = "...",
+    [ASSIGNMENT] = "=",
+    [MULTIPLY_ASSIGNMENT] = "*=",
+    [DIVIDE_ASSIGNMENT] = "/=",
+    [MOD_ASSIGNMENT] = "%=",
+    [PLUS_ASSIGNMENT] = "+=",
+    [MINUS_ASSIGNMENT] = "-=",
+    [LEFT_BITSHIFT_ASSIGNMENT] = "<<=",
+    [RIGHT_BITSHIFT_ASSIGNMENT] = ">>=",
+    [AND_ASSIGNMENT] = "&=",
+    [XOR_ASSIGNMENT] = "^=",
+    [OR_ASSIGNMENT] = "|=",
+    [COMMA] = ",",
+    [HASH] = "#",
+    [DOUBLE_HASH] = "##",
 };
 
 
@@ -74,12 +115,33 @@ char consume_next_char() {
     return fgetc(source_file);
 }
 
+
 char peek_next_char() {
     char next_char = fgetc(source_file);
     fseek(source_file, -1, SEEK_CUR);
     return next_char;
 }
 
+char peek_ahead_char(int characters_ahead) {
+    int chars_read = 0;
+    char ahead_char = 0;
+
+    for (int i = 0; i < characters_ahead; i++) {
+        ahead_char = fgetc(source_file);
+        if (ahead_char == EOF) {
+            break;
+        }
+        chars_read++;
+    }
+
+    fseek(source_file, -chars_read, SEEK_CUR);
+
+    return ahead_char;
+}
+
+_Bool match(const char expected) {
+    return peek_next_char() == expected;
+}
 
 _Bool is_numeric (const char c) {
     return c >= '0' && c <= '9';
@@ -115,7 +177,9 @@ void error(int line_num, char *message) {
 
 void add_punctuator_token(const enum punctuator punctuator) {
     token new_token = {.type = PUNCTUATOR, .punctuator = punctuator,
-                       .lexeme[0] = punctuator_strings[punctuator], .line = current_line};
+                       .lexeme[0] = '\0', .line = current_line};
+
+    strcpy(new_token.lexeme, punctuator_strings[punctuator]);
 
     tokens[num_tokens++] = new_token;
 }
@@ -171,22 +235,163 @@ int scan_token() {
 
     switch (c) {
         // Punctuator
+        case '[': add_punctuator_token(LEFT_SQUARE_BRACKET); break;
+        case ']': add_punctuator_token(RIGHT_SQUARE_BRACKET); break;
         case '(': add_punctuator_token(LEFT_PARENTHESIS); break;
         case ')': add_punctuator_token(RIGHT_PARENTHESIS); break;
         case '{': add_punctuator_token(LEFT_BRACE); break;
         case '}': add_punctuator_token(RIGHT_BRACE); break;
-        case ';': add_punctuator_token(SEMICOLON); break;
-        case '+': add_punctuator_token(PLUS); break;
+        case '.':
+            switch (peek_next_char()) {
+                case '.': if (peek_ahead_char(2) == '.') {add_punctuator_token(ELLIPSIS); consume_next_char();}
+                consume_next_char(); break;
 
-        // Comment or divide
-        case '/':
-            if (peek_next_char() == '/') {
-                // If we're in a comment, consume characters until the next line
-                while (consume_next_char() != '\n');
-                current_line++;
+                default:  add_punctuator_token(DOT); break;
             }
-            else {
-                add_punctuator_token(FWD_SLASH);
+            break;
+
+        case '-':
+            switch (peek_next_char()) {
+                case '>': add_punctuator_token(ARROW); consume_next_char(); break;
+                case '-': add_punctuator_token(DECREMENT); consume_next_char(); break;
+                case '=': add_punctuator_token(MINUS_ASSIGNMENT); consume_next_char(); break;
+
+                default:  add_punctuator_token(MINUS); break;
+            }
+            break;
+
+        case '&':
+            switch(peek_next_char()) {
+                case '&': add_punctuator_token(LOGICAL_AND); consume_next_char(); break;
+                case '=': add_punctuator_token(AND_ASSIGNMENT); consume_next_char(); break;
+
+                default:  add_punctuator_token(AMPERSAND); break;
+            }
+            break;
+
+        case '*':
+            switch (peek_next_char()) {
+                case '=': add_punctuator_token(MULTIPLY_ASSIGNMENT);
+                consume_next_char(); break;
+
+                default:  add_punctuator_token(ASTERISK); break;
+            }
+            break;
+
+        case '+':
+            switch (peek_next_char()) {
+                case '+': add_punctuator_token(INCREMENT); consume_next_char(); break;
+                case '=': add_punctuator_token(PLUS_ASSIGNMENT); consume_next_char(); break;
+
+                default:  add_punctuator_token(PLUS); break;
+            }
+            break;
+
+        case '~': add_punctuator_token(TILDE); break;
+        case '!':
+            switch(peek_next_char()) {
+                case '=': add_punctuator_token(INEQUALITY);
+                consume_next_char(); break;
+
+                default: add_punctuator_token(EXCLIMATION_MARK); break;
+            }
+            break;
+
+        case '/':
+            switch (peek_next_char()) {
+                // If we're in a comment, consume characters until the next line
+                case '/': while (consume_next_char() != '\n'); current_line++; break;
+                case '=': add_punctuator_token(DIVIDE_ASSIGNMENT);
+                consume_next_char(); break;
+
+                default: add_punctuator_token(FWD_SLASH); break;
+            }
+            break;
+
+        case '%':
+            switch (peek_next_char()) {
+                case '=': add_punctuator_token(MOD_ASSIGNMENT);
+                consume_next_char(); break;
+
+                default:  add_punctuator_token(REMAINDER); break;
+            }
+            break;
+
+        case '<':
+            switch (peek_next_char()) {
+                case '<':
+                    if (peek_ahead_char(2) == '=') {
+                        add_punctuator_token(LEFT_BITSHIFT_ASSIGNMENT);
+                        consume_next_char();
+                    }
+                    else {
+                        add_punctuator_token(LEFT_BITSHIFT);
+                    }
+                    consume_next_char();
+                    break;
+
+                case '=': add_punctuator_token(LESS_THAN_EQUAL); consume_next_char(); break;
+
+                default:  add_punctuator_token(LESS_THAN); break;
+            }
+            break;
+
+        case '>':
+            switch (peek_next_char()) {
+                case '>':
+                    if (peek_ahead_char(2) == '=') {
+                        add_punctuator_token(RIGHT_BITSHIFT_ASSIGNMENT);
+                        consume_next_char();
+                    }
+                    else {
+                        add_punctuator_token(RIGHT_BITSHIFT);
+                    }
+                    consume_next_char();
+                    break;
+
+                case '=': add_punctuator_token(GREATER_THAN_EQUAL); consume_next_char(); break;
+
+                default:  add_punctuator_token(GREATER_THAN); break;
+            }
+            break;
+
+        case '^':
+            switch(peek_next_char()) {
+                case '=': add_punctuator_token(XOR_ASSIGNMENT);
+                consume_next_char(); break;
+
+                default:  add_punctuator_token(BITWISE_XOR); break;
+            }
+            break;
+
+        case '|':
+            switch(peek_next_char()) {
+                case '|': add_punctuator_token(LOGICAL_OR); consume_next_char(); break;
+                case '=': add_punctuator_token(XOR_ASSIGNMENT); consume_next_char(); break;
+
+                default: add_punctuator_token(BITWISE_OR); break;
+            }
+            break;
+
+        case '?': add_punctuator_token(QUESTION_MARK); break;
+        case ':': add_punctuator_token(COLON); break;
+        case ';': add_punctuator_token(SEMICOLON); break;
+        case '=':
+            switch (peek_next_char()) {
+                case '=': add_punctuator_token(EQUALITY);
+                consume_next_char(); break;
+
+                default: add_punctuator_token(ASSIGNMENT); break;
+            }
+            break;
+
+        case ',': add_punctuator_token(COMMA); break;
+        case '#':
+            switch (peek_next_char()) {
+                case '#': add_punctuator_token(DOUBLE_HASH);
+                consume_next_char(); break;
+
+                default: add_punctuator_token(HASH); break;
             }
             break;
 
