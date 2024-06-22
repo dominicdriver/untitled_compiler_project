@@ -298,11 +298,20 @@ int scan_token() {
             break;
 
         case '/':
-            switch (peek_next_char()) {
+            switch (consume_next_char()) {
                 // If we're in a comment, consume characters until the next line
                 case '/': while (consume_next_char() != '\n'); current_line++; break;
-                case '=': add_punctuator_token(DIVIDE_ASSIGNMENT);
-                consume_next_char(); break;
+                case '*': ; // Technically a variable declaration can't follow directly after "case"
+                    int in_comment = 1;
+                    while (in_comment) {
+                        switch (consume_next_char()) {
+                            case '\n': current_line++; break;
+                            case '*' : if (consume_next_char() == '/') {in_comment = 0;} break;
+                            default  : break;
+                        }
+                    }
+                    break;
+                case '=': add_punctuator_token(DIVIDE_ASSIGNMENT); break;
 
                 default: add_punctuator_token(FWD_SLASH); break;
             }
