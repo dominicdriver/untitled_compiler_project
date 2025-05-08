@@ -13,6 +13,7 @@ memory_arena *create_arena(size_t capacity) {
 
     return arena;
 }
+
 void *allocate_from_arena(memory_arena* arena, size_t size) {
     size_t aligned_size = size + (-size & (MAX_ALIGNMENT - 1));
 
@@ -25,7 +26,8 @@ void *allocate_from_arena(memory_arena* arena, size_t size) {
 
     return (char*) arena->data + arena->bytes_used - aligned_size;
 }
-void delete_arena(memory_arena* arena) {
+
+void delete_arena(memory_arena *arena) {
     free(arena->data);
     free(arena);
 }

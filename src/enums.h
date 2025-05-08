@@ -119,6 +119,9 @@ enum subtype {
     DIRECTIVE_ERROR,
     DIRECTIVE_PRAGMA,
     DIRECTIVE_NULL,
+
+    HEADER_Q,
+    HEADER_H
 };
 
 enum token_type {

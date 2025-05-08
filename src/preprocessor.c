@@ -134,11 +134,13 @@ void handle_include_directive(tk_node *token_node) {
 
     token *header_token = &token_node->token;
 
+// If the header name uses quotes, search in the current directory for the header
+    if (header_token->subtype == HEADER_Q) {
     strcpy(header_path, header_token->src_filepath);
     header_path[header_token->filename_index] = '\0';
     strcat(header_path + header_token->filename_index, header_token->lexeme);
-
     found_header = add_file(header_path);
+}
 
     // Try to open the header file in different include directories until successful
     for (size_t i = 0; !found_header && i < sizeof(include_dirs)/sizeof(include_dirs[0]); i++) {
@@ -356,9 +358,9 @@ bool evaluate_if(tk_node *token_node) {
         }
         else if (ptr->type == PUNCTUATOR) {
             int r_operand = *--number_stack_pointer;
-            int m_operand; // Only used for ternary operator (a ? b : c)
-            int l_operand;
-            if (ptr->subtype == PUN_QUESTION_MARK) m_operand = *--number_stack_pointer;;
+            int m_operand = 0; // Only used for ternary operator (a ? b : c)
+            int l_operand = 0;
+            if (ptr->subtype == PUN_QUESTION_MARK) m_operand = *--number_stack_pointer;
             if (ptr->subtype != PUN_EXCLAMATION_MARK) l_operand = *--number_stack_pointer;
 
             switch (ptr->subtype) {
@@ -868,7 +870,7 @@ tk_list_segment expand_macro(tk_node *tk_list_ptr) {
 
 void process_preprocessing_tokens(tk_node *token_node) {
     tk_node* ptr = token_node;
-    tk_node* before_directive;
+    tk_node* before_directive = NULL;
 
     while(ptr->next != NULL) {
         current_src_file = ptr->token.src_filepath;

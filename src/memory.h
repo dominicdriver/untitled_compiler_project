@@ -11,7 +11,7 @@ typedef struct {
 
 memory_arena *create_arena(size_t capacity);
 
-void *allocate_from_arena(memory_arena* arena, size_t size);
-void delete_arena(memory_arena* arena);
+void *allocate_from_arena(memory_arena *arena, size_t size);
+void delete_arena(memory_arena *arena);
 
 #endif //MEMORY_H

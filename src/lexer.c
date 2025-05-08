@@ -573,10 +573,14 @@ void create_header_token(token *new_token, header_type type) {
             build_lexme(is_h_header_char, new_token->lexeme);
             consume_whitespace();
             consume_next_char(); // Consume the ending `>`
+
+            new_token->subtype = HEADER_H;
             break;
         case Q_HEADER:
             build_lexme(is_q_header_char, new_token->lexeme);
             consume_next_char(); // Consume the ending `"`
+
+            new_token->subtype = HEADER_Q;
             break;
     }
 
