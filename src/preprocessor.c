@@ -21,15 +21,6 @@ macro macros[MAX_NUM_MACROS];
 size_t num_macros = 0;
 size_t max_macros = 0;
 
-int operator_precedence[DIRECTIVE_NULL] = {
-    [PUN_ASTERISK] = 1, [PUN_FWD_SLASH] = 1,
-    [PUN_EXCLAMATION_MARK] = 2,
-    [PUN_LEFT_PARENTHESIS] = -10, [PUN_RIGHT_PARENTHESIS] = -10,
-    [PUN_LOGICAL_AND] = -1, [PUN_LOGICAL_OR] = -2,
-    [PUN_QUESTION_MARK] = -5,
-    0
-};
-
 const char *current_src_file;
 int current_line;
 

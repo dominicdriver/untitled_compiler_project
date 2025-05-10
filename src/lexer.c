@@ -5,7 +5,6 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
 
 memory_arena *token_arena;
@@ -300,10 +299,6 @@ void build_lexme(bool compare_func(char), char *lexeme) {
         lexeme_ptr++;
         *lexeme_ptr = '\0';
     }
-}
-
-void error(const char *filename, int line, char *message) {
-    fprintf(stderr, "\033[91mError in %s on line %d: %s\033[0m\n", filename, line, message);
 }
 
 void create_punctuator_token(token* new_token, const enum subtype punctuator) {
@@ -676,7 +671,7 @@ token scan_token(void) {
             break;
 
             case '/':
-                switch (consume_next_char()) {
+                switch (peek_next_char()) {
                     // If we're in a comment, consume characters until the next line
                     case '/': while (consume_next_char() != '\n'); create_newline_token(&new_token); break;
                     case '*': ; // Technically a variable declaration can't follow directly after "case"

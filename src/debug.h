@@ -11,7 +11,7 @@
 
 void print_token(token token);
 void print_all_tokens(void);
-void print_tokens(tk_node *start, size_t num_tokens);
+void print_tokens(tk_node *list_ptr, size_t num_tokens);
 void print_list_segment(tk_list_segment segment);
 void print_replacement_tokens(token *replacement);
 macro *macro_exists_2(const char *identifier, bool function_like);

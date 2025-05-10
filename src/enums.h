@@ -138,4 +138,25 @@ enum token_type {
     END
 };
 
+#define OPERATORS                  \
+        OP(NONE, "")               \
+                                   \
+        OP(ADD, "ADD")             \
+        OP(SUB, "SUB")             \
+                                   \
+        OP(MULTIPLY, "MULT")       \
+        OP(DIVIDE, "DIV")          \
+        OP(MOD, "MOD")             \
+                                   \
+        OP(INCREMENT, "INCREMENT") \
+        OP(DECREMENT, "DECREMENT") \
+                                   \
+        OP(COMMA, "COMMA")
+
+#define OP(op, str) op,
+enum operator {
+    OPERATORS
+};
+#undef OP
+
 #endif //ENUMS_H

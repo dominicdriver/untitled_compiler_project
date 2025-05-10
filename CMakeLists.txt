@@ -13,7 +13,9 @@ add_executable(untitled_compiler_project
         src/main.c
         src/lexer.c
         src/preprocessor.c
+        src/parser.c
         src/memory.c
         src/debug.c
         src/helper_functions.c
+        src/common.c
 )

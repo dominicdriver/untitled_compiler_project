@@ -16,6 +16,8 @@
 
 #define FILES_TOP files[files_top]
 
+extern int operator_precedence[];
+
 typedef struct {
     enum token_type type;
     enum subtype subtype;
