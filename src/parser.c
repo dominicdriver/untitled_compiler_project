@@ -4,6 +4,7 @@
 #include "parser.h"
 #include "helper_functions.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,15 +25,167 @@ token end_token = {.type = END, 0};
 
 AST_node error_node = {0};
 
-#define OP(op, str) str,
+typedef enum {
+    MULTIPLICATIVE_EXPR,
+    ADDITIVE_EXPR,
+    SHIFT_EXPR,
+    RELATIONAL_EXPR,
+    EQUALITY_EXPR,
+    BITWISE_AND_EXPR,
+    EXCLUSIVE_OR_EXPR,
+    INCLUSIVE_OR_EXPR,
+    LOGICAL_AND_EXPR,
+    LOGICAL_OR_EXPR,
+
+    ARGUMENT_EXPR_LIST
+} binary_expression_names;
+
+#define OP(op, pun, str) [pun] = op,
+enum operator pun_to_op[] = {
+    OPERATORS
+};
+#undef OP
+
+enum operator assignment_ops[] = {
+    ASSIGNMENT,
+    MULTIPLY_ASSIGNMENT,
+    DIVIDE_ASSIGNMENT,
+    MOD_ASSIGNMENT,
+    PLUS_ASSIGNMENT,
+    MINUS_ASSIGNMENT,
+    LEFT_BITSHIFT_ASSIGNMENT,
+    RIGHT_BITSHIFT_ASSIGNMENT,
+    AND_ASSIGNMENT,
+    XOR_ASSIGNMENT,
+    OR_ASSIGNMENT,
+    NONE
+};
+
+// Based on C grammar, doesn't include increment, decrement, etc.
+enum operator unary_ops[] = {
+    AMPERSAND,
+    ASTERISK,
+    PLUS,
+    MINUS,
+    BITWISE_NOT,
+    LOGICAL_NOT,
+    NONE
+};
+
+uint8_t binary_op_precedence[] = {
+    [ASTERISK] = 12,
+    [DIVIDE] = 12,
+    [MOD] = 12,
+
+    [PLUS] = 11,
+    [MINUS] = 11,
+
+    [LEFT_BITSHIFT] = 10,
+    [RIGHT_BITSHIFT] = 10,
+
+    [GREATER_THAN] = 9,
+    [GREATER_THAN_EQUAL] = 9,
+    [LESS_THAN] = 9,
+    [LESS_THAN_EQUAL] = 9,
+
+    [EQUALITY] = 8,
+    [INEQUALITY] = 8,
+
+    [AMPERSAND] = 7,
+
+    [BITWISE_XOR] = 6,
+
+    [BITWISE_OR] = 5,
+
+    [LOGICAL_AND] = 4,
+
+    [LOGICAL_OR] = 3,
+};
+
+binary_expr binary_expressions[] = {
+    [MULTIPLICATIVE_EXPR] =
+    {
+        .name  = "multiplicative_expression",
+        .ops   = (enum operator[]) {ASTERISK, DIVIDE, MOD, NONE},
+        .expr  = NULL
+    },
+    [ADDITIVE_EXPR] =
+    {
+        .name = "additive_expression",
+        .ops  = (enum operator[]) {PLUS, MINUS, NONE},
+        .expr = &binary_expressions[0]
+    },
+    [SHIFT_EXPR] =
+    {
+        .name = "shift_expression",
+        .ops  = (enum operator[]) {LEFT_BITSHIFT, RIGHT_BITSHIFT, NONE},
+        .expr = &binary_expressions[1]
+    },
+    [RELATIONAL_EXPR] =
+    {
+        .name = "relational_expression",
+        .ops = (enum operator[]) {LESS_THAN, GREATER_THAN, LESS_THAN_EQUAL, GREATER_THAN_EQUAL, NONE},
+        .expr = &binary_expressions[2]
+    },
+    [EQUALITY_EXPR] =
+    {
+        .name = "equality_expression",
+        .ops = (enum operator[]) {EQUALITY, INEQUALITY, NONE},
+        .expr = &binary_expressions[3]
+    },
+    [BITWISE_AND_EXPR] =
+    {
+        .name = "bitwise_and_expression",
+        .ops = (enum operator[]) {AMPERSAND, NONE},
+        .expr = &binary_expressions[4]
+    },
+    [EXCLUSIVE_OR_EXPR] =
+    {
+        .name = "exclusive_or_expression",
+        .ops = (enum operator[]) {BITWISE_XOR, NONE},
+        .expr = &binary_expressions[5]
+    },
+    [INCLUSIVE_OR_EXPR] =
+    {
+        .name = "inclusive_or_expression",
+        .ops = (enum operator[]) {BITWISE_OR, NONE},
+        .expr = &binary_expressions[6]
+    },
+    [LOGICAL_AND_EXPR] =
+    {
+        .name = "logical_and_expression",
+        .ops = (enum operator[]) {LOGICAL_AND, NONE},
+        .expr = &binary_expressions[7]
+    },
+    [LOGICAL_OR_EXPR] =
+    {
+        .name = "logical_or_expression",
+        .ops = (enum operator[]) {LOGICAL_OR, NONE},
+        .expr = &binary_expressions[8]
+    },
+
+    [ARGUMENT_EXPR_LIST] =
+    {
+        .name = "argument_expression_list",
+        .ops = (enum operator[]) {COMMA, NONE},
+        .expr = NULL
+    }
+};
+
+#define OP(op, pun, str) str,
 char *operator_strings[] = {
     OPERATORS
 };
 #undef OP
 
+void ast_error(token *error_token, char *message);
 void print_ast(const AST_node *root, uint8_t level);
 
-token *consume_token() {
+AST_node *create_cast_expression(void);
+AST_node *create_expression(int precedence);
+AST_node *create_assignment_expression(void);
+
+token *consume_token(void) {
     if (tk_stream_pos == tk_stream_len) {
         return &end_token;
     }
@@ -41,7 +194,7 @@ token *consume_token() {
     return &token_stream[tk_stream_pos++];
 }
 
-token *peek_token() {
+token *peek_token(void) {
     if (tk_stream_pos == tk_stream_len) {
         return &end_token;
     }
@@ -49,10 +202,38 @@ token *peek_token() {
     return &token_stream[tk_stream_pos];
 }
 
+bool operator_in_array(enum operator op, enum operator ops[]) {
+    for (enum operator *op_ptr = &ops[0]; *op_ptr != NONE; op_ptr++) {
+        if (op == *op_ptr) return true;
+    }
+
+    return false;
+}
+
+AST_node *create_unary_node(enum operator op, AST_node *node) {
+    if (node == &error_node) {
+        return &error_node;
+    }
+
+    AST_node *unary_node = allocate_from_arena(ast_arena, sizeof(AST_node));
+    *unary_node = (AST_node) {0};
+
+    unary_node->type = unary;
+    unary_node->op = op;
+    unary_node->child = node;
+
+    return unary_node;
+}
+
 AST_node *create_binary_node(enum operator op, AST_node *left, AST_node *right) {
+    if (left == &error_node || right == &error_node) {
+        return &error_node;
+    }
+
     AST_node *binary_node = allocate_from_arena(ast_arena, sizeof(AST_node));
     *binary_node = (AST_node) {0};
 
+    binary_node->type = binary;
     binary_node->op = op;
     binary_node->child = left;
     binary_node->child->sibling = right;
@@ -60,14 +241,43 @@ AST_node *create_binary_node(enum operator op, AST_node *left, AST_node *right) 
     return binary_node;
 }
 
+AST_node *create_ternary_node(enum operator op, AST_node *left, AST_node *mid, AST_node *right) {
+    if (left == &error_node || mid == &error_node || right == &error_node) {
+        return &error_node;
+    }
 
-AST_node *create_primary_expression() {
+    AST_node *ternary_node = allocate_from_arena(ast_arena, sizeof(AST_node));
+    *ternary_node = (AST_node) {0};
+
+    ternary_node->type = ternary;
+    ternary_node->op = op;
+    ternary_node->child = left;
+    ternary_node->child->sibling = mid;
+    ternary_node->child->sibling->sibling = right;
+
+    return ternary_node;
+}
+
+
+AST_node *create_primary_expression(void) {
     AST_node *node = allocate_from_arena(ast_arena, sizeof(AST_node));
     *node = (AST_node) {0};
 
-    token *tk = consume_token();
+    token *token = consume_token();
 
-    switch (tk->type) {
+    if (token->type == PUNCTUATOR && token->subtype == PUN_LEFT_PARENTHESIS) {
+        node = create_expression(0);
+
+        token = consume_token();
+
+        if (!(token->type == PUNCTUATOR && token->subtype == PUN_RIGHT_PARENTHESIS)) {
+            ast_error(token, "Expected ')' after expression");
+        }
+
+        return node;
+    }
+
+    switch (token->type) {
         case IDENTIFIER:
         case CONSTANT:
         case STRING_LITERAL:
@@ -75,82 +285,171 @@ AST_node *create_primary_expression() {
             break;
 
         default:
-            error(current_token->src_filepath, current_token->line, "Expected primary expression");
+            ast_error(current_token, "Expected primary expression");
             return &error_node;
     }
 
     return node;
 }
 
-AST_node *create_postfix_expression() {
+AST_node *create_postfix_expression(void) {
+    // TODO: Implement
     return create_primary_expression();
 }
 
-AST_node *create_unary_expression() {
-    AST_node *node = create_postfix_expression();
+AST_node *create_unary_expression(void) {
+    AST_node *node = NULL;
+
+    enum operator unary_op;
+    token *token = peek_token();
+
+    // Check if the next non-terminal should be a primary expression
+    if (token->type == IDENTIFIER || token->type == CONSTANT || token->type == STRING_LITERAL ||
+        token->subtype == PUN_LEFT_PARENTHESIS) {
+
+            node = create_postfix_expression();
+            node->type = unary;
+
+            return node;
+        }
+
+    token = consume_token();
+    unary_op = pun_to_op[token->subtype];
+
+    if (operator_in_array(unary_op, unary_ops)) {
+        node = create_cast_expression();
+        node->type = unary;
+
+        return node;
+    }
+
+    if (unary_op == SIZEOF && peek_token()->subtype == PUN_LEFT_PARENTHESIS) {
+        // TODO: '(' typename ')'
+    }
+
+    switch (unary_op) {
+        case INCREMENT:
+        case DECREMENT:
+        case SIZEOF:
+            break;
+
+        default:
+            ast_error(current_token, "Expected unary operator");
+            return &error_node;
+    }
+
+    node = create_unary_expression();
+    node = create_unary_node(unary_op, node);
 
     return node;
 }
 
-AST_node *create_cast_expression() {
+AST_node *create_cast_expression(void) {
     AST_node *node = create_unary_expression();
 
     return node;
 }
 
-AST_node *create_multiplicative_expression(int precedence) {
-    AST_node *left = create_cast_expression();
+AST_node *create_binary_expression(binary_expr *expr, int precedence) {
+    AST_node *left = NULL;
     AST_node *right = NULL;
 
-    token *next_token = peek_token();
+    if (expr == &binary_expressions[MULTIPLICATIVE_EXPR]) {
+        left = create_cast_expression();
+    } else if (expr == &binary_expressions[ARGUMENT_EXPR_LIST]) {
+        left = create_assignment_expression();
+    } else {
+        left = create_binary_expression(expr->expr, precedence);
+    }
 
-    while ((next_token->subtype == PUN_ASTERISK  ||
-            next_token->subtype == PUN_FWD_SLASH ||
-            next_token->subtype == PUN_REMAINDER) && operator_precedence[next_token->subtype] >= precedence) {
+    token *token = peek_token();
 
-        enum operator op;
-        switch (next_token->subtype) {
-            case PUN_ASTERISK:  op = MULTIPLY; break;
-            case PUN_FWD_SLASH: op = DIVIDE; break;
-            case PUN_REMAINDER: op = MOD; break;
-            default:
-                error(current_token->src_filepath, current_token->line, "Unknown operator");
-                return &error_node;
+    if (token->type != PUNCTUATOR) {
+        if (left != &error_node) {
+            ast_error(current_token, "Expected punctuator");
         }
+        return &error_node;
+    }
+
+    enum operator op = pun_to_op[token->subtype];
+
+    while (operator_in_array(op, expr->ops) &&
+           binary_op_precedence[op] >= precedence) {
 
         consume_token();
 
-        right = create_multiplicative_expression(operator_precedence[next_token->subtype] + 1);
+        if (expr == &binary_expressions[MULTIPLICATIVE_EXPR]) {
+            right = create_cast_expression();
+        } else {
+            right = create_binary_expression(expr->expr, binary_op_precedence[op] + 1);
+        }
+
         left = create_binary_node(op, left, right);
-        next_token = peek_token();
+        token = peek_token();
+        op = pun_to_op[token->subtype];
     }
 
     return left;
 }
 
-AST_node *create_additive_expression(int precedence) {
-    AST_node *left = create_multiplicative_expression(precedence);
+AST_node *create_conditional_expression(void) {
+    AST_node *left = create_binary_expression(&binary_expressions[LOGICAL_OR_EXPR], 0);
+    AST_node *mid = NULL;
     AST_node *right = NULL;
 
-    token *next_token = peek_token();
+    token *token = peek_token();
 
-    while ((next_token->subtype == PUN_PLUS ||
-            next_token->subtype == PUN_MINUS) && operator_precedence[next_token->subtype] >= precedence) {
+    if (token->subtype != PUN_QUESTION_MARK) {
+        return left;
+    }
 
-        enum operator op;
-        switch (next_token->subtype) {
-            case PUN_PLUS:  op = ADD; break;
-            case PUN_MINUS: op = SUB; break;
-            default:
-                error(current_token->src_filepath, current_token->line, "Unknown operator");
-                return &error_node;
-        }
+    mid = create_expression(0);
+
+    if (token->subtype != PUN_COLON) {
+        ast_error(current_token, "Expected : in ternary expression");
+        return &error_node;
+    }
+
+    right = create_conditional_expression();
+
+    return create_ternary_node(QUESTION_MARK, left, mid, right);
+}
+
+AST_node *create_assignment_expression(void) {
+    AST_node *left = create_conditional_expression();
+    AST_node *right = NULL;
+
+    token *token = peek_token();
+    enum operator op = pun_to_op[token->subtype];
+
+    if (!operator_in_array(op, assignment_ops)) {
+         return left;
+    }
+
+    // If here, the next token is an assignment operator,
+    // so the conditional expression is treated as a unary expression
+
+    consume_token();
+
+    right = create_assignment_expression();
+    left = create_binary_node(op, left, right);
+
+    return left;
+}
+
+AST_node *create_expression(int precedence) {
+    AST_node *left = create_assignment_expression();
+    AST_node *right = NULL;
+
+    token *token = peek_token();
+
+    while (token->subtype == PUN_COMMA && operator_precedence[token->subtype] >= precedence) {
+        enum operator op = COMMA;
 
         consume_token();
 
-        right = create_additive_expression(operator_precedence[next_token->subtype] + 1);
+        right = create_assignment_expression();
         left = create_binary_node(op, left, right);
-        next_token = peek_token();
     }
 
     return left;
@@ -183,22 +482,28 @@ void initialise_parser(void) {
 }
 
 AST_node *create_ast_tree(void) {
-    token *next_token = NULL;
+    AST_node *node = NULL;
+    token *token = NULL;
     ast_arena = create_arena(AST_ARENA_MAX_SIZE);
 
 
-    while ((next_token = peek_token()) != NULL) {
-        switch (next_token->type) {
-            case CONSTANT:;
-                AST_node *node = create_additive_expression(0);
+    while ((token = peek_token()) != NULL) {
+        switch (token->type) {
+            case IDENTIFIER:
+            case CONSTANT:
+            default:
+                node = create_expression(0);
                 print_ast(node, 0);
                 exit(0);
-            default:
                 break;
         }
     }
 
     return ast_tree;
+}
+
+void ast_error(token *error_token, char *message) {
+    error(error_token->src_filepath, error_token->line, message);
 }
 
 void print_ast(const AST_node *root, uint8_t level) {

@@ -90,6 +90,7 @@ enum subtype {
     PUN_COMMA,
     PUN_HASH,
     PUN_DOUBLE_HASH,
+    PUN_NONE,
 
     // Constants
     CONST_INTEGER,
@@ -138,25 +139,75 @@ enum token_type {
     END
 };
 
-#define OPERATORS                  \
-        OP(NONE, "")               \
-                                   \
-        OP(ADD, "ADD")             \
-        OP(SUB, "SUB")             \
-                                   \
-        OP(MULTIPLY, "MULT")       \
-        OP(DIVIDE, "DIV")          \
-        OP(MOD, "MOD")             \
-                                   \
-        OP(INCREMENT, "INCREMENT") \
-        OP(DECREMENT, "DECREMENT") \
-                                   \
-        OP(COMMA, "COMMA")
+#define OPERATORS                                                                             \
+    OP(NONE, PUN_NONE, "")                                                                    \
+                                                                                              \
+    OP(INCREMENT, PUN_INCREMENT, "INCREMENT") /* Used for postfix and prefix increment */     \
+    OP(DECREMENT, PUN_DECREMENT, "DECREMENT") /* Used for postfix and prefix decrement */     \
+    OP(DOT, PUN_DOT, "DOT")                                                                   \
+    OP(ARROW, PUN_ARROW, "ARROW")                                                             \
+                                                                                              \
+    OP(LOGICAL_NOT, PUN_EXCLAMATION_MARK, "LOGICAL NOT")                                      \
+    OP(BITWISE_NOT, PUN_TILDE, "BITWISE NOT")                                                 \
+    OP(SIZEOF, KW_SIZEOF, "sizeof")                                                           \
+                                                                                              \
+    OP(PLUS, PUN_PLUS, "PLUS") /* Used for addition and unary plus */                         \
+    OP(MINUS, PUN_MINUS, "MINUS") /* Used for subtraction and unary minus */                  \
+                                                                                              \
+    OP(ASTERISK, PUN_ASTERISK, "ASTERISK") /* Used for multiplication and dereference */      \
+    OP(DIVIDE, PUN_FWD_SLASH, "DIV")                                                          \
+    OP(MOD, PUN_REMAINDER, "MOD")                                                             \
+                                                                                              \
+                                                                                              \
+    OP(LEFT_BITSHIFT, PUN_LEFT_BITSHIFT, "LEFT BITSHIFT")                                     \
+    OP(RIGHT_BITSHIFT, PUN_RIGHT_BITSHIFT, "RIGHT BITSHIFT")                                  \
+                                                                                              \
+                                                                                              \
+    OP(LESS_THAN, PUN_LESS_THAN, "LESS THAN")                                                 \
+    OP(LESS_THAN_EQUAL, PUN_LESS_THAN_EQUAL, "LESS THAN EQUAL")                               \
+    OP(GREATER_THAN, PUN_GREATER_THAN, "GREATER THAN")                                        \
+    OP(GREATER_THAN_EQUAL, PUN_GREATER_THAN_EQUAL, "GREATER THAN EQUAL")                      \
+                                                                                              \
+    OP(EQUALITY, PUN_EQUALITY, "EQUALITY")                                                    \
+    OP(INEQUALITY, PUN_INEQUALITY, "INEQUALITY")                                              \
+                                                                                              \
+    OP(AMPERSAND, PUN_AMPERSAND, "AMPERSAND") /* Used for bitwise AND and address-of */       \
+                                                                                              \
+    OP(BITWISE_XOR, PUN_BITWISE_XOR, "BITWISE XOR")                                           \
+    OP(BITWISE_OR, PUN_BITWISE_OR, "BITWISE OR")                                              \
+                                                                                              \
+    OP(LOGICAL_AND, PUN_LOGICAL_AND, "LOGICAL AND")                                           \
+                                                                                              \
+    OP(LOGICAL_OR, PUN_LOGICAL_OR, "LOGICAL OR")                                              \
+                                                                                              \
+    OP(QUESTION_MARK, PUN_QUESTION_MARK, "QUESTION MARK")                                     \
+                                                                                              \
+    OP(ASSIGNMENT, PUN_ASSIGNMENT, "ASSIGNMENT")                                              \
+    OP(PLUS_ASSIGNMENT, PUN_PLUS_ASSIGNMENT, "PLUS ASSIGNMENT")                               \
+    OP(MINUS_ASSIGNMENT, PUN_MINUS_ASSIGNMENT, "MINUS ASSIGNMENT")                            \
+    OP(MULTIPLY_ASSIGNMENT, PUN_MULTIPLY_ASSIGNMENT, "MULTIPLY ASSIGNMENT")                   \
+    OP(DIVIDE_ASSIGNMENT, PUN_DIVIDE_ASSIGNMENT, "DIVIDE ASSIGNMENT")                         \
+    OP(MOD_ASSIGNMENT, PUN_MOD_ASSIGNMENT, "MOD ASSIGNMENT")                                  \
+    OP(LEFT_BITSHIFT_ASSIGNMENT, PUN_LEFT_BITSHIFT_ASSIGNMENT, "LEFT BITSHIFT ASSIGNMENT")    \
+    OP(RIGHT_BITSHIFT_ASSIGNMENT, PUN_RIGHT_BITSHIFT_ASSIGNMENT, "RIGHT BITSHIFT ASSIGNMENT") \
+    OP(AND_ASSIGNMENT, PUN_AND_ASSIGNMENT, "AND ASSIGNMENT")                                  \
+    OP(XOR_ASSIGNMENT, PUN_XOR_ASSIGNMENT, "XOR ASSIGNMENT")                                  \
+    OP(OR_ASSIGNMENT, PUN_OR_ASSIGNMENT, "OR ASSIGNMENT")                                     \
+                                                                                              \
+    OP(COMMA, PUN_COMMA, "COMMA")
 
-#define OP(op, str) op,
+#define OP(op, pun, str) op,
 enum operator {
     OPERATORS
 };
 #undef OP
+
+enum AST_type {
+    none,
+    unary,
+    binary,
+    ternary,
+    assignment
+};
 
 #endif //ENUMS_H

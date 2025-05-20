@@ -106,6 +106,7 @@ char *subtype_strings[] = {
     [PUN_COMMA] = ",",
     [PUN_HASH] = "#",
     [PUN_DOUBLE_HASH] = "##",
+    [PUN_NONE] = "",
 
     [CONST_INTEGER] = "",
     [CONST_UNSIGNED_INT] = "",

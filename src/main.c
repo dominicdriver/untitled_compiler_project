@@ -1,5 +1,6 @@
 #include "common.h"
 #include "debug.h"
+#include "parser.h"
 #include "helper_functions.h"
 
 #include <stdlib.h>
@@ -42,14 +43,21 @@ int main(void) {
         tokens->token.lexeme[0] = '\0';
         tokens->next = NULL;
 
+        // Lexer
         scan_and_insert_tokens(tokens);
 
+        // Preprocessor
         process_preprocessing_tokens(tokens);
+
+        // Parser
+        initialise_parser();
+        create_ast_tree();
+
 
         char output_path[64] = {0};
 
         strcpy(output_path, "output/");
-        strcat(output_path, files_to_process[i]);
+        strcat(output_path, strrchr(files_to_process[i], '/')+1);
         output_path[strlen(output_path)-1] = 'i';
 
         save_tokens_to_file(output_path, tokens);
