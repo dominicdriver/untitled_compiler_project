@@ -13,6 +13,7 @@
 #include "debug.h"
 #include "memory.h"
 #include "helper_functions.h"
+#include "strings.h"
 
 bool in_define = 0;
 bool in_include = 0;
@@ -21,13 +22,14 @@ macro macros[MAX_NUM_MACROS];
 size_t num_macros = 0;
 size_t max_macros = 0;
 
-const char *current_src_file;
-int current_line;
+// Some commonly used strings
+static string one_string = create_const_string("1");
+static string zero_string = create_const_string("0");
+static string defined_string = create_const_string("defined");
+static string exclamation_string = create_const_string("!");
 
-void initialise_macros(void) {
-    macros[num_macros++] = (macro) {.name = "__x86_64__", .num_params = 0, .hash = hash("__x86_64__")};
-    macros[num_macros++] = (macro) {.name = "__LP64__", .num_params = 0, .hash = hash("__LP64__")};
-}
+const string *current_src_file;
+int current_line;
 
 bool macros_equal(const macro *macro_one, const macro *macro_two) {
     bool macros_equal = true;
@@ -35,11 +37,11 @@ bool macros_equal(const macro *macro_one, const macro *macro_two) {
     const size_t replacement_length = sizeof(macro_one->replacement)/sizeof(macro_one->replacement[0]);
     const size_t parameter_length = sizeof(macro_one->parameters)/sizeof(macro_one->parameters[0]);
 
-    macros_equal &= (strcmp(macro_one->name, macro_two->name) == 0);
+    macros_equal &= (string_cmp(&macro_one->name, &macro_two->name) == 0);
     macros_equal &= (macro_one->is_function_like == macro_two->is_function_like);
 
     for (size_t i = 0; i < replacement_length; i++) {
-        macros_equal &= (strcmp(macro_one->replacement[i].lexeme, macro_two->replacement[i].lexeme) == 0);
+        macros_equal &= (string_cmp(&macro_one->replacement[i].lexeme, &macro_two->replacement[i].lexeme) == 0);
         macros_equal &= (macro_one->replacement[i].type == macro_two->replacement[i].type);
         macros_equal &= (macro_one->replacement[i].subtype == macro_two->replacement[i].subtype);
     }
@@ -48,7 +50,7 @@ bool macros_equal(const macro *macro_one, const macro *macro_two) {
 
     if (macro_one->is_function_like) {
         for (size_t i = 0; i < parameter_length; i++) {
-            macros_equal &= (strcmp(macro_one->parameters[i], macro_two->parameters[i]) == 0);
+            macros_equal &= (string_cmp(&macro_one->parameters[i], &macro_two->parameters[i]) == 0);
         }
     }
 
@@ -57,7 +59,7 @@ bool macros_equal(const macro *macro_one, const macro *macro_two) {
 
 void add_macro(const macro new_macro) {
     for (size_t i = 0; i < num_macros; i++) {
-        if (new_macro.hash == macros[i].hash && strcmp(new_macro.name, macros[i].name) == 0) {
+        if (new_macro.hash == macros[i].hash && string_cmp(&new_macro.name, &macros[i].name) == 0) {
             if (!macros_equal(&new_macro, &macros[i])) {
                 error(current_src_file, current_line, "Duplicate macro");
             }
@@ -72,10 +74,10 @@ void add_macro(const macro new_macro) {
     }
 }
 
-void remove_macro(const char* macro_name) {
+void remove_macro(const string* macro_name) {
     uint64_t macro_name_hash = hash(macro_name);
     for (size_t i = 0; i < num_macros; i++) {
-        if (macros[i].hash == macro_name_hash && strcmp(macros[i].name, macro_name) == 0) {
+        if (macros[i].hash == macro_name_hash && string_cmp(&macros[i].name, macro_name) == 0) {
             macros[i] = (macro) {0};
 
             // Shift all elements left to remove the gap
@@ -88,7 +90,7 @@ void remove_macro(const char* macro_name) {
 }
 
 macro *macro_exists(tk_node *token_node) {
-    char *identifier = token_node->token.lexeme;
+    string *identifier = &token_node->token.lexeme;
     tk_node *next_tk_node = token_node->next;
 
     uint64_t identifier_hash = hash(identifier);
@@ -102,7 +104,7 @@ macro *macro_exists(tk_node *token_node) {
 
     for (size_t i = 0; i < num_macros; i++) {
         if (identifier_hash == macros[i].hash) {
-        if (strcmp(identifier, macros[i].name) == 0 && (function_like | !macros[i].is_function_like)) {
+        if (string_cmp(identifier, &macros[i].name) == 0 && (function_like | !macros[i].is_function_like)) {
             return &macros[i];
         }
         }
@@ -115,9 +117,10 @@ void handle_include_directive(tk_node *token_node) {
     // token_node points to the include token
 
     // TODO: Use own standard library
-    char *include_dirs[] = {"/usr/include/", "/usr/local/include/"};
+    const string include_dirs[] = {create_const_string("/usr/include/"),
+                                   create_const_string("/usr/local/include/")};
 
-    char header_path[128] = {0};
+    string header_path = create_local_string("", MAX_LEXEME_LENGTH);
 
     bool found_header = false;
 
@@ -125,34 +128,34 @@ void handle_include_directive(tk_node *token_node) {
 
     token *header_token = &token_node->token;
 
-// If the header name uses quotes, search in the current directory for the header
+    // If the header name uses quotes, search in the current directory for the header
     if (header_token->subtype == HEADER_Q) {
-    strcpy(header_path, header_token->src_filepath);
-    header_path[header_token->filename_index] = '\0';
-    strcat(header_path + header_token->filename_index, header_token->lexeme);
-    found_header = add_file(header_path);
-}
+        string_copy(&header_path, &header_token->src_filepath);
+        header_path.len = header_token->filename_index;
+        string_cat(&header_path, &header_token->lexeme);
+
+        found_header = add_file(&header_path);
+    }
 
     // Try to open the header file in different include directories until successful
     for (size_t i = 0; !found_header && i < sizeof(include_dirs)/sizeof(include_dirs[0]); i++) {
+        string_copy(&header_path, &include_dirs[i]);
+        string_cat(&header_path, &token_node->token.lexeme);
 
-        strcpy(header_path, include_dirs[i]);
-        strcat(header_path, token_node->token.lexeme);
-
-        found_header = add_file(header_path);
+        found_header = add_file(&header_path);
     }
 
     if (!found_header) {
         char error_msg[64] = "Cannot find ";
-        strcat(error_msg, token_node->token.lexeme);
+        strcat(error_msg, token_node->token.lexeme.data);
 
-        error(token_node->token.src_filepath, token_node->token.line, error_msg);
+        error(&token_node->token.src_filepath, token_node->token.line, error_msg);
         return;
     }
 
     token_node = token_node->next;
 
-    debugf("Including: %s\n", header_path);
+    debugf("Including: %.*s\n", header_path.len, header_path.data);
     scan_and_insert_tokens(token_node);
 }
 
@@ -163,17 +166,17 @@ void handle_define_directive(tk_node *token_node) {
 
     token *identifier_token = &token_node->token;
 
-    strcpy(new_macro.defined_file, identifier_token->src_filepath);
+    new_macro.defined_file = identifier_token->src_filepath;
     new_macro.defined_line = identifier_token->line;
 
     token_node = token_node->next;
 
     if (identifier_token->type != IDENTIFIER) {
-        error(identifier_token->src_filepath, identifier_token->line, "Expected identifier after #define");
+        error(&identifier_token->src_filepath, identifier_token->line, "Expected identifier after #define");
     }
 
-    strcpy(new_macro.name, identifier_token->lexeme);
-    new_macro.hash = hash(new_macro.name);
+    new_macro.name = identifier_token->lexeme;
+    new_macro.hash = hash(&new_macro.name);
 
     // If the token is a left parenthesis, and if there was no whitespace before it, it's function-like
     if (token_node->token.subtype == PUN_LEFT_PARENTHESIS &&
@@ -185,19 +188,19 @@ void handle_define_directive(tk_node *token_node) {
         while (token_node->token.subtype != PUN_RIGHT_PARENTHESIS) {
 
             if (token_node->token.type != IDENTIFIER && token_node->token.subtype != PUN_ELLIPSIS) {
-                error(token_node->token.src_filepath, token_node->token.line,
+                error(&token_node->token.src_filepath, token_node->token.line,
                      "Expected identifier or ... in macro parameter list");
                 return;
             }
 
             if (token_node->token.subtype == PUN_ELLIPSIS &&
                 token_node->next->token.subtype != PUN_RIGHT_PARENTHESIS) {
-                error(token_node->token.src_filepath, token_node->token.line,
+                error(&token_node->token.src_filepath, token_node->token.line,
                  "Expected ... to be the last argument");
                 return;
             }
 
-            strcpy(new_macro.parameters[new_macro.num_params++], token_node->token.lexeme);
+            new_macro.parameters[new_macro.num_params++] = token_node->token.lexeme;
 
             token_node = token_node->next;
 
@@ -216,7 +219,7 @@ void handle_define_directive(tk_node *token_node) {
         *replacement_ptr = token_node->token;
 
         for (short i = 0; i < new_macro.num_params; i++) {
-            if (strcmp(token_node->token.lexeme, new_macro.parameters[i]) == 0) {
+            if (string_cmp(&token_node->token.lexeme, &new_macro.parameters[i]) == 0) {
                 replacement_ptr->type = ARGUMENT;
             }
         }
@@ -231,11 +234,11 @@ void handle_define_directive(tk_node *token_node) {
 
 void handle_undef_directive(tk_node *token_node) {
     if (token_node->token.type != IDENTIFIER) {
-        error(token_node->token.src_filepath, token_node->token.line, "Expected identifier after #undef");
+        error(&token_node->token.src_filepath, token_node->token.line, "Expected identifier after #undef");
         return;
     }
 
-    remove_macro(token_node->token.lexeme);
+    remove_macro(&token_node->token.lexeme);
 }
 
 void handle_defined(tk_node *token_node) {
@@ -256,10 +259,10 @@ void handle_defined(tk_node *token_node) {
     token_node->token.subtype = CONST_INTEGER;
 
     if (macro_exists(token_node)) {
-        strcpy(token_node->token.lexeme, "1");
+        token_node->token.lexeme = one_string;
     }
     else {
-        strcpy(token_node->token.lexeme, "0");
+        token_node->token.lexeme = zero_string;
     }
 
     before_defined->next = token_node;
@@ -287,13 +290,13 @@ bool evaluate_if(tk_node *token_node) {
     // Shunting Yard Algorithm
     while (token_node->token.type != NEWLINE) {
         if (token_node->token.type == IDENTIFIER) {
-            if (strcmp(token_node->token.lexeme, "defined") == 0) {
+            if (string_cmp(&token_node->token.lexeme, &defined_string) == 0) {
                 handle_defined(before_token_ptr);
             }
             else {
                 token_node->token.type = CONSTANT;
                 token_node->token.subtype = CONST_INTEGER;
-                strcpy(token_node->token.lexeme, "0");
+                token_node->token.lexeme = zero_string;
 
                 *RPN_pointer++ = token_node->token;
             }
@@ -321,7 +324,7 @@ bool evaluate_if(tk_node *token_node) {
             // Ignore any blank tokens
         }
         else if (token_node->token.type != PUNCTUATOR) {
-            error(token_node->token.src_filepath, token_node->token.line, "Expected punctuator");
+            error(&token_node->token.src_filepath, token_node->token.line, "Expected punctuator");
             return false;
         }
         else {
@@ -342,10 +345,10 @@ bool evaluate_if(tk_node *token_node) {
 
     for (token *ptr = RPN_tokens; ptr < RPN_pointer; ptr++) {
         if (ptr->subtype >= CONST_INTEGER && ptr->subtype <= CONST_UNSIGNED_LONG_LONG) {
-            *number_stack_pointer++ = atoi(ptr->lexeme); // TODO: Implement this conversion
+            *number_stack_pointer++ = atoi(ptr->lexeme.data); // TODO: Implement this conversion
         }
         else if (ptr->subtype == CONST_CHAR || ptr->subtype == CONST_WIDE_CHAR) {
-            *number_stack_pointer++ = ptr->lexeme[0]; // TODO: Might need to handle wide char differently
+            *number_stack_pointer++ = ptr->lexeme.data[0]; // TODO: Might need to handle wide char differently
         }
         else if (ptr->type == PUNCTUATOR) {
             int r_operand = *--number_stack_pointer;
@@ -369,7 +372,7 @@ bool evaluate_if(tk_node *token_node) {
                 case PUN_INEQUALITY: *number_stack_pointer++ = l_operand != r_operand; break;
                 case PUN_EXCLAMATION_MARK: *number_stack_pointer++ = !r_operand; break;
                 case PUN_QUESTION_MARK: *number_stack_pointer++ = l_operand ? m_operand : r_operand; break;
-                default: error(ptr->src_filepath, ptr->line, "#if: Unknown operator"); return false;
+                default: error(&ptr->src_filepath, ptr->line, "#if: Unknown operator"); return false;
             }
         }
     }
@@ -388,9 +391,9 @@ void handle_if_directives(tk_node *token_node, enum subtype if_type) {
         tk_node *new_list_entry = allocate_from_arena(token_arena, sizeof(tk_node));
 
         new_list_entry->token = (token) {.type = IDENTIFIER, .line = token_node->token.line};
-        strcpy(new_list_entry->token.lexeme, "defined");
+        new_list_entry->token.lexeme = defined_string;
 
-        strcpy(new_list_entry->token.src_filepath, token_node->token.src_filepath);
+        new_list_entry->token.src_filepath = token_node->token.src_filepath;
         new_list_entry->token.filename_index = token_node->token.filename_index;
 
         new_list_entry->next = token_node->next;
@@ -403,9 +406,9 @@ void handle_if_directives(tk_node *token_node, enum subtype if_type) {
             new_list_entry->token = (token) {.type = PUNCTUATOR, .subtype = PUN_EXCLAMATION_MARK,
                                              .line = token_node->token.line};
 
-            strcpy(new_list_entry->token.lexeme, "!");
+            new_list_entry->token.lexeme = exclamation_string;
 
-            strcpy(new_list_entry->token.src_filepath, token_node->token.src_filepath);
+            new_list_entry->token.src_filepath = token_node->token.src_filepath;
             new_list_entry->token.filename_index = token_node->token.filename_index;
 
             new_list_entry->next = token_node->next;
@@ -436,7 +439,7 @@ void handle_if_directives(tk_node *token_node, enum subtype if_type) {
             // Basically a copy
             tk_node *ptr = if_directive;
             while (ptr->next->token.type != NEWLINE) {
-                if (strcmp(ptr->token.lexeme, "defined") != 0 && macro_exists(ptr->next)) {
+                if (string_cmp(&ptr->token.lexeme, &defined_string) != 0 && macro_exists(ptr->next)) {
                     tk_list_segment expanded_macro_segment = expand_macro(ptr->next);
 
                     ptr->next = advance_list(ptr, 2); // Remove the macro identifier
@@ -484,9 +487,9 @@ void handle_if_directives(tk_node *token_node, enum subtype if_type) {
     }
 }
 
-short find_parameter_index(const char *parameter_name, const macro *replacement_macro) {
+short find_parameter_index(const string *parameter_name, const macro *replacement_macro) {
     for (short param_num = 0; param_num < replacement_macro->num_params; param_num++) {
-        if (strcmp(parameter_name, replacement_macro->parameters[param_num]) == 0) {
+        if (string_cmp(parameter_name, &replacement_macro->parameters[param_num]) == 0) {
             return param_num;
         }
     }
@@ -502,13 +505,14 @@ tk_list_segment substitute_argument(tk_node *arg_tk_ptr, const macro *replacemen
     const int token_line = arg_tk_ptr->token.line;
     short param_index = -1;
 
-    char token_source_file[128];
-    ptrdiff_t token_filename_index;
+    string token_source_file = create_heap_string(arg_tk_ptr->token.src_filepath.len + 1, token_arena);
 
-    strcpy(token_source_file, arg_tk_ptr->token.src_filepath);
+    uint16_t token_filename_index;
+
+    string_copy(&token_source_file, &arg_tk_ptr->token.src_filepath);
     token_filename_index = arg_tk_ptr->token.filename_index;
 
-    param_index = find_parameter_index(arg_tk_ptr->token.lexeme, replacement_macro);
+    param_index = find_parameter_index(&arg_tk_ptr->token.lexeme, replacement_macro);
 
     // Parameter not found
     if (param_index == -1) {
@@ -518,7 +522,7 @@ tk_list_segment substitute_argument(tk_node *arg_tk_ptr, const macro *replacemen
     arg_tk_ptr->token = arguments[param_index][0];
     arg_tk_ptr->token.line = token_line;
 
-    strcpy(arg_tk_ptr->token.src_filepath, token_source_file);
+    string_copy(&arg_tk_ptr->token.src_filepath, &token_source_file);
     arg_tk_ptr->token.filename_index = token_filename_index;
 
     // While still more argument tokens, add them to the token list
@@ -537,7 +541,7 @@ tk_list_segment substitute_argument(tk_node *arg_tk_ptr, const macro *replacemen
         new_entry->token = *arg_token_ptr;
         new_entry->token.line = token_line;
 
-        strcpy(new_entry->token.src_filepath, arg_tk_ptr->token.src_filepath);
+        new_entry->token.src_filepath = token_source_file;
         new_entry->token.filename_index = arg_tk_ptr->token.filename_index;
 
         if (seg_ptr != new_entry) {
@@ -560,10 +564,10 @@ tk_node *consume_argument(tk_node *token_node, token *argument_tokens) {
 
     if (token_node->token.subtype == PUN_COMMA ||
         token_node->token.subtype == PUN_RIGHT_PARENTHESIS) { // Empty argument
-        *argument_tokens = (token) {.type = BLANK, .lexeme = "", .line = token_node->token.line,
+        *argument_tokens = (token) {.type = BLANK, .lexeme = {0}, .line = token_node->token.line, // TODO: setting lexeme to NULL here might be invalid and crash
                                     .filename_index = token_node->token.filename_index};
 
-        strcpy(argument_tokens->src_filepath, token_node->token.src_filepath);
+        argument_tokens->src_filepath = token_node->token.src_filepath;
 
         return token_node;
     }
@@ -589,10 +593,10 @@ tk_node *consume_argument(tk_node *token_node, token *argument_tokens) {
 
 // stringify_argument will find the correct parameter, combine the lexemes of all tokens
 // in the argument, taking into account the whitespace between them.
-token stringify_argument(const char *parameter_name, macro *replacement_macro, token arguments[8][32]) {
-    token stringified_token = {.type = STRING_LITERAL, .lexeme[0] = '\0', .line = current_line};
-    token *argument_ptr = NULL;
+token stringify_argument(const string *parameter_name, macro *replacement_macro, token arguments[8][32]) {
+    token stringified_token = {.type = STRING_LITERAL, .lexeme = {0}, .line = current_line};
     short param_index = -1;
+    uint32_t required_lexeme_length = 0;
 
     param_index = find_parameter_index(parameter_name, replacement_macro);
 
@@ -601,36 +605,47 @@ token stringify_argument(const char *parameter_name, macro *replacement_macro, t
         return (token) {0};
     }
 
-    argument_ptr = arguments[param_index];
-
-    // Ignore any whitespace before the argument's first token
-    for (; (argument_ptr+1)->line != 0; argument_ptr++) {
-        strcat(stringified_token.lexeme, argument_ptr->lexeme);
-
-        if ((argument_ptr+1)->follows_whitespace) {
-            strcat(stringified_token.lexeme, " ");
-        }
+    // Calculate how much space is needed for the stringified token's lexeme
+    for (token *argument_ptr = arguments[param_index]; argument_ptr->line != 0; argument_ptr++) {
+        required_lexeme_length += argument_ptr->lexeme.len;
+        required_lexeme_length += (argument_ptr->follows_whitespace);
     }
 
-    // Ignore any whitespace after the argument's last token
-    strcat(stringified_token.lexeme, argument_ptr->lexeme);
+    // Remove length for whitespace before the first token
+    required_lexeme_length -= (arguments[param_index])->follows_whitespace;
+
+    if (required_lexeme_length > UINT16_MAX) {
+        error(current_src_file, current_line, "Failed to stringify argument: Required length > UINT16_MAX");
+        return (token) {0};
+    }
+
+    stringified_token.lexeme = create_heap_string((uint16_t) required_lexeme_length + 1, token_arena);
+
+    for (token *argument_ptr = arguments[param_index]; argument_ptr->line != 0; argument_ptr++) {
+        string_cat(&stringified_token.lexeme, &argument_ptr->lexeme);
+
+        // Ignore any whitespace before the argument's first token
+        if ((argument_ptr+1)->line != 0 && argument_ptr->follows_whitespace) {
+            string_cat_c(&stringified_token.lexeme, ' ');
+        }
+    }
 
     return stringified_token;
 }
 
-tk_list_segment expand_macro(tk_node *tk_list_ptr) {
+tk_list_segment expand_macro(tk_node *token_node) {
     macro *replacement_macro = NULL;
     token arguments[8][32] = {0};
 
-    tk_list_segment macro_expanded_segment = {NULL, NULL, 0};
+     tk_list_segment macro_expanded_segment = {NULL, NULL, 0};
 
-    if ((replacement_macro = macro_exists(tk_list_ptr)) == NULL) {
-        error(tk_list_ptr->token.src_filepath, tk_list_ptr->token.line, "Expected macro");
+    if ((replacement_macro = macro_exists(token_node)) == NULL) {
+        error(&token_node->token.src_filepath, token_node->token.line, "Expected macro");
         return (tk_list_segment) {NULL, NULL, 0};
     }
 
     if (replacement_macro->is_function_like) {
-        tk_node *arg_ptr = advance_list(tk_list_ptr, 2); // Set to after the opening parenthesis
+        tk_node *arg_ptr = advance_list(token_node, 2); // Set to after the opening parenthesis
 
         for (short arg_num = 0; arg_num < replacement_macro->num_params; arg_num++) {
             arg_ptr = consume_argument(arg_ptr, arguments[arg_num]);
@@ -642,7 +657,7 @@ tk_list_segment expand_macro(tk_node *tk_list_ptr) {
             arg_ptr = advance_list(arg_ptr, 1);
         }
 
-        remove_from_list(tk_list_ptr, advance_list(tk_list_ptr, 1), arg_ptr);
+        remove_from_list(token_node, advance_list(token_node, 1), arg_ptr);
     }
 
     const token *replacement_tk_ptr = replacement_macro->replacement;
@@ -664,10 +679,10 @@ tk_list_segment expand_macro(tk_node *tk_list_ptr) {
         macro_expanded_segment.len++;
 
         new_entry->token = *replacement_tk_ptr++;
-        new_entry->token.irreplaceable = !strcmp(new_entry->token.lexeme, replacement_macro->name);
-        new_entry->token.line = tk_list_ptr->token.line;
-        new_entry->token.filename_index = tk_list_ptr->token.filename_index;
-        strcpy(new_entry->token.src_filepath, tk_list_ptr->token.src_filepath);
+        new_entry->token.irreplaceable = (string_cmp(&new_entry->token.lexeme, &replacement_macro->name) == 0);
+        new_entry->token.line = token_node->token.line;
+        new_entry->token.filename_index = token_node->token.filename_index;
+        new_entry->token.src_filepath = token_node->token.src_filepath;
 
 
         // Stringification #
@@ -676,11 +691,11 @@ tk_list_segment expand_macro(tk_node *tk_list_ptr) {
             const token * parameter_token = replacement_tk_ptr++;
 
             if (parameter_token->type != ARGUMENT) {
-                error(tk_list_ptr->token.src_filepath, tk_list_ptr->token.line, "# not followed by parameter");
+                error(&token_node->token.src_filepath, token_node->token.line, "# not followed by parameter");
                 return (tk_list_segment) {0};
             }
 
-            new_entry->token = stringify_argument(parameter_token->lexeme, replacement_macro, arguments);
+            new_entry->token = stringify_argument(&parameter_token->lexeme, replacement_macro, arguments);
         }
         // -----------------
 
@@ -707,7 +722,7 @@ tk_list_segment expand_macro(tk_node *tk_list_ptr) {
         // ----------------------
         if (new_entry->token.subtype == PUN_DOUBLE_HASH) {
             // If the ## is the first replacement token
-            error(tk_list_ptr->token.src_filepath, tk_list_ptr->token.line, "Found ## at start of replacement list");
+            error(&token_node->token.src_filepath, token_node->token.line, "Found ## at start of replacement list");
             return (tk_list_segment) {0};
         }
 
@@ -716,7 +731,7 @@ tk_list_segment expand_macro(tk_node *tk_list_ptr) {
         while (replacement_tk_ptr->subtype == PUN_DOUBLE_HASH) {
             // If the ## is the last replacement token (i.e. the next token is invalid), throw an error
             if ((replacement_tk_ptr+1)->line == 0) {
-                error(tk_list_ptr->token.src_filepath, tk_list_ptr->token.line, "Found ## at end of replacement list");
+                error(&token_node->token.src_filepath, token_node->token.line, "Found ## at end of replacement list");
                 return (tk_list_segment) {0};
             }
 
@@ -742,7 +757,19 @@ tk_list_segment expand_macro(tk_node *tk_list_ptr) {
                 new_entry->token.type = IDENTIFIER;
             }
 
-            strcat(new_entry->token.lexeme, concat_tk_list.token.lexeme);
+            uint32_t concat_length = new_entry->token.lexeme.len + concat_tk_list.token.lexeme.len;
+
+            if (concat_length >= UINT16_MAX) {
+                error(current_src_file, current_line, "Failed to concat tokens: Required length > UINT16_MAX");
+            }
+            else if (concat_tk_list.token.type != BLANK) {
+                string concat_string = create_heap_string((uint16_t) concat_length + 1, token_arena);
+
+                string_copy(&concat_string, &new_entry->token.lexeme);
+                string_cat(&concat_string, &concat_tk_list.token.lexeme);
+
+                new_entry->token.lexeme = concat_string;
+            }
 
             replacement_tk_ptr += 2; // Skip the ## token and the token to the right of it
         }
@@ -801,7 +828,7 @@ tk_list_segment expand_macro(tk_node *tk_list_ptr) {
                     }
                     else {
                         ptr->token.type = BLANK;
-                        ptr->token.lexeme[0] = '\0';
+                        ptr->token.lexeme = (string) {0};
                     }
                 }
             }
@@ -844,7 +871,7 @@ tk_list_segment expand_macro(tk_node *tk_list_ptr) {
                 macro_expanded_segment.len += sub_macro_segment.len - 1;
             } else {
                 sub_tk_ptr->token.type = BLANK;
-                sub_tk_ptr->token.lexeme[0] = '\0';
+                sub_tk_ptr->token.lexeme = (string) {0};
             }
         }
     }
@@ -864,7 +891,7 @@ void process_preprocessing_tokens(tk_node *token_node) {
     tk_node* before_directive = NULL;
 
     while(ptr->next != NULL) {
-        current_src_file = ptr->token.src_filepath;
+        current_src_file = &ptr->token.src_filepath;
         current_line = ptr->token.line;
 
          if (ptr->token.type != DIRECTIVE) {
@@ -892,14 +919,14 @@ void process_preprocessing_tokens(tk_node *token_node) {
         while (ptr->next->token.type != NEWLINE) {
 
             // Skip expansion for `defined` operator
-            if (strcmp(ptr->token.lexeme, "defined") == 0) {
+            if (string_cmp(&ptr->token.lexeme, &defined_string) == 0) {
 
                 // If a ( is found, make sure there's a matching )
                 if (ptr->next->token.subtype == PUN_LEFT_PARENTHESIS) {
                     ptr = advance_list(ptr, 3);
 
                     if (ptr->token.subtype != PUN_RIGHT_PARENTHESIS) {
-                        error(ptr->token.src_filepath, ptr->token.line, "Expected ) after defined");
+                        error(&ptr->token.src_filepath, ptr->token.line, "Expected ) after defined");
                     }
 
                     continue;

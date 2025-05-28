@@ -18,4 +18,5 @@ add_executable(untitled_compiler_project
         src/debug.c
         src/helper_functions.c
         src/common.c
+        src/strings.c
 )

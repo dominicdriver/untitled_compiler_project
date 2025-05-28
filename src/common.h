@@ -3,6 +3,7 @@
 
 #include "enums.h"
 #include "memory.h"
+#include "strings.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -21,9 +22,9 @@ extern int operator_precedence[];
 typedef struct {
     enum token_type type;
     enum subtype subtype;
-    char src_filepath[128]; // TODO: Fixed size for now
-    ptrdiff_t filename_index;
-    char lexeme[128]; // TODO: Fixed size for now, will break for long lexemes
+    string src_filepath;
+    uint16_t filename_index;
+    string lexeme;
     int32_t line;
     bool irreplaceable;
     bool follows_whitespace;
@@ -47,7 +48,7 @@ typedef struct {
 } buff;
 
 typedef struct {
-    char filepath[128];
+    string filepath;
     buff buffer;
 
     int current_pos;
@@ -55,14 +56,14 @@ typedef struct {
 } file_info;
 
 typedef struct {
-    char name[256];
+    string name;
     uint64_t hash;
     short num_params;
-    char parameters[MAX_PARAMETERS][MAX_PARAMETER_LENGTH];
+    string parameters[MAX_PARAMETERS];
     bool is_function_like;
-    token replacement[256];
+    token replacement[512];
 
-    char defined_file[128];
+    string defined_file;
     int defined_line;
 } macro;
 
@@ -88,7 +89,7 @@ extern size_t num_macros;
 extern bool in_define;
 extern bool in_include;
 
-void error(const char *filename, int line, char *message);
+void error(const string *filename, int line, char *message);
 void scan_and_insert_tokens(tk_node *insert_point);
 void process_preprocessing_tokens(tk_node *token_node);
 void expand_macro_tokens(tk_node *token_node);
@@ -97,6 +98,6 @@ macro *macro_exists(tk_node *token_node);
 tk_node *remove_tokens(const tk_node *start, const tk_node *end);
 tk_list_segment expand_macro(tk_node *token_node);
 
-bool add_file(const char *file_path);
+bool add_file(const string *file_path);
 
 #endif //COMMON_H

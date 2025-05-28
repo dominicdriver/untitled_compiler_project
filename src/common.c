@@ -1,6 +1,12 @@
 #include "enums.h"
+#include "common.h"
 
 #include <stdio.h>
+
+#define RED_TEXT "\x1B[1;31m"
+#define RESET_TEXT "\x1B[0m"
+
+#define COLOUR_TEXT(colour, text) colour##_TEXT text RESET_TEXT
 
 int operator_precedence[] = {
     [PUN_ASTERISK] = 1, [PUN_FWD_SLASH] = 1,
@@ -12,6 +18,6 @@ int operator_precedence[] = {
     0
 };
 
-void error(const char *filename, int line, char *message) {
-    fprintf(stderr, "\033[91mError in %s on line %d: %s\033[0m\n", filename, line, message);
+void error(const string *filename, int line, char *message) {
+    fprintf(stderr, COLOUR_TEXT(RED, "Error in %.*s on line %d: %s\n"), filename->len, filename->data, line, message);
 }

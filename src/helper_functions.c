@@ -69,8 +69,8 @@ void remove_from_list(tk_node *list, const tk_node *start, const tk_node *end) {
     before_remove->next = ptr;
 }
 
-void save_tokens_to_file(const char *file_path, tk_node *start_node) {
-    FILE *out_file = fopen(file_path, "w");
+void save_tokens_to_file(const string *file_path, tk_node *start_node) {
+    FILE *out_file = fopen(file_path->data, "w");
 
     for (tk_node *ptr = start_node; ptr != NULL; ptr = advance_list(ptr, 1)) {
         if (ptr->token.type == STRING_LITERAL) {
@@ -85,13 +85,15 @@ void save_tokens_to_file(const char *file_path, tk_node *start_node) {
             fputc('#', out_file);
         }
 
-        if (ptr->token.type != BLANK && ptr->token.type != NEWLINE) {
-            for (size_t i = 0; ptr->token.lexeme[i]; i++) {
-                if (ptr->token.lexeme[i] & 0x80) {
+        if (ptr->token.type == BLANK || ptr->token.type == END) continue;
+
+        if (ptr->token.type != NEWLINE) {
+            for (size_t i = 0; ptr->token.lexeme.data[i]; i++) {
+                if (ptr->token.lexeme.data[i] & 0x80) {
                     fputc('\\', out_file);
-                    fputc(ESCAPED_CHAR_MAPPINGS[(uint8_t) ptr->token.lexeme[i] & 0x7F], out_file);
+                    fputc(ESCAPED_CHAR_MAPPINGS[(uint8_t) ptr->token.lexeme.data[i] & 0x7F], out_file);
                 } else {
-                    fputc(ptr->token.lexeme[i], out_file);
+                    fputc(ptr->token.lexeme.data[i], out_file);
                 }
             }
         }
@@ -118,13 +120,18 @@ void save_tokens_to_file(const char *file_path, tk_node *start_node) {
     fclose(out_file);
 }
 
-uint64_t hash(const char *str) {
+uint64_t hash(const string *str) {
     uint64_t complete_hash = 0;
+    char *data = str->data;
 
-    while (*str) {
+    if (data == NULL) {
+        return complete_hash;
+    }
+
+    while (data != &str->data[str->len]) {
         uint64_t current_hash = 0;
-        for (uint8_t i = 0; i < 64 && *str; i+=8) {
-            current_hash |= ((uint64_t)(*str++) << i);
+        for (uint8_t i = 0; i < 64 && *data; i+=8) {
+            current_hash |= ((uint64_t)(*data++) << i);
         }
         complete_hash ^= current_hash;
     }

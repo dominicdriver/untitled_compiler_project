@@ -10,10 +10,10 @@ void print_token(token token) {
     char token_type[16];
 
     switch (token.type) {
-        case PUNCTUATOR: printf("%s", token.lexeme); break;
-        case STRING_LITERAL: printf("\"%s\"", token.lexeme); break;
+        case PUNCTUATOR: printf("%.*s", token.lexeme.len, token.lexeme.data); break;
+        case STRING_LITERAL: printf("\"%.*s\"", token.lexeme.len, token.lexeme.data); break;
         case NEWLINE: printf("\n"); break;
-        default: printf("%s ", token.lexeme); break;
+        default: printf("%.*s ", token.lexeme.len, token.lexeme.data); break;
     }
     return;
     switch (token.type) {
@@ -33,7 +33,7 @@ void print_token(token token) {
         printf("%s: Line: %d\n", token_type, token.line);
     }
     else {
-        printf("%s: %s, Line: %d\n", token_type, token.lexeme, token.line);
+        printf("%s: %.*s, Line: %d\n", token_type, token.lexeme.len, token.lexeme.data, token.line);
     }
 }
 
@@ -64,28 +64,31 @@ void print_list_segment(tk_list_segment segment) {
         char *format_string;
 
         if (ptr->token.type == STRING_LITERAL) {
-            format_string = "\"%s\"";
+            format_string = "\"%.*s\"";
         } else if (ptr->token.subtype == PUN_LEFT_PARENTHESIS ||
                    ptr->token.subtype == PUN_DOT) {
-            format_string = "%s";
+            format_string = "%.*s";
         } else if (ptr->next != NULL && (ptr->next->token.subtype == PUN_RIGHT_PARENTHESIS ||
                                          ptr->next->token.subtype == PUN_DOT)) {
-            format_string = "%s";
+            format_string = "%.*s";
         } else {
-            format_string = "%s ";
+            format_string = "%.*s ";
         }
 
-        printf(format_string, ptr->token.lexeme);
+        printf(format_string, ptr->token.lexeme.len, ptr->token.lexeme.data);
     }
 
     printf("\n");
 }
 
 macro *macro_exists_2(const char *identifier, bool function_like) {
-    uint64_t identifier_hash = hash(identifier);
+    string identifier_str = {.data = (char*) identifier, .cap = MAX_LEXEME_LENGTH,
+                             .len = (uint16_t) strlen(identifier)};
+
+    uint64_t identifier_hash = hash(&identifier_str);
     for (size_t i = 0; i < num_macros; i++) {
         if (identifier_hash == macros[i].hash) {
-            if (strcmp(identifier, macros[i].name) != 0)
+            if (string_cmp(&identifier_str, &macros[i].name) != 0)
             printf("QA\n");
         if (
             macros[i].is_function_like == function_like) {
@@ -100,7 +103,7 @@ macro *macro_exists_2(const char *identifier, bool function_like) {
 void print_replacement_tokens(token *replacement)
 {
     while(replacement->line != 0) {
-        printf("%s ", replacement->lexeme);
+        printf("%.*s ", replacement->lexeme.len, replacement->lexeme.data);
         replacement++;
     }
     printf("\n");

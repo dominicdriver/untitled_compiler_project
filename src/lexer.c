@@ -1,5 +1,6 @@
 #include "enums.h"
 #include "common.h"
+#include "strings.h"
 #include "lexer.h"
 
 #include <stddef.h>
@@ -16,125 +17,127 @@ int files_top = -1;
 
 bool escaped;
 
+static string newline_string = create_const_string("\n");
+
 // Maps subtype enums to their string representation
-char *subtype_strings[] = {
+const string subtype_strings[] = {
     // Keywords
-    [KW_AUTO] = "auto",
-    [KW_BREAK] = "break",
-    [KW_CASE] = "case",
-    [KW_CHAR] = "char",
-    [KW_CONST] = "const",
-    [KW_CONTINUE] = "continue",
-    [KW_DEFAULT] = "default",
-    [KW_DO] = "do",
-    [KW_DOUBLE] = "double",
-    [KW_ELSE] = "else",
-    [KW_ENUM] = "enum",
-    [KW_EXTERN] = "extern",
-    [KW_FLOAT] = "float",
-    [KW_FOR] = "for",
-    [KW_GOTO] = "goto",
-    [KW_IF] = "if",
-    [KW_INLINE] = "inline",
-    [KW_INT] = "int",
-    [KW_LONG] = "long",
-    [KW_REGISTER] = "register",
-    [KW_RESTRICT] = "restrict",
-    [KW_RETURN] = "return",
-    [KW_SHORT] = "short",
-    [KW_SIGNED] = "signed",
-    [KW_SIZEOF] = "sizeof",
-    [KW_STATIC] = "static",
-    [KW_STRUCT] = "struct",
-    [KW_SWITCH] = "switch",
-    [KW_TYPEDEF] = "typedef",
-    [KW_UNION] = "union",
-    [KW_UNSIGNED] = "unsigned",
-    [KW_VOID] = "void",
-    [KW_VOLATILE] = "volatile",
-    [KW_WHILE] = "while",
-    [KW__BOOL] = "_Bool",
-    [KW__COMPLEX] = "_Complex",
-    [KW__IMAGINARY] = "_Imaginary",
+    [KW_AUTO] = create_const_string("auto"),
+    [KW_BREAK] = create_const_string("break"),
+    [KW_CASE] = create_const_string("case"),
+    [KW_CHAR] = create_const_string("char"),
+    [KW_CONST] = create_const_string("const"),
+    [KW_CONTINUE] = create_const_string("continue"),
+    [KW_DEFAULT] = create_const_string("default"),
+    [KW_DO] = create_const_string("do"),
+    [KW_DOUBLE] = create_const_string("double"),
+    [KW_ELSE] = create_const_string("else"),
+    [KW_ENUM] = create_const_string("enum"),
+    [KW_EXTERN] = create_const_string("extern"),
+    [KW_FLOAT] = create_const_string("float"),
+    [KW_FOR] = create_const_string("for"),
+    [KW_GOTO] = create_const_string("goto"),
+    [KW_IF] = create_const_string("if"),
+    [KW_INLINE] = create_const_string("inline"),
+    [KW_INT] = create_const_string("int"),
+    [KW_LONG] = create_const_string("long"),
+    [KW_REGISTER] = create_const_string("register"),
+    [KW_RESTRICT] = create_const_string("restrict"),
+    [KW_RETURN] = create_const_string("return"),
+    [KW_SHORT] = create_const_string("short"),
+    [KW_SIGNED] = create_const_string("signed"),
+    [KW_SIZEOF] = create_const_string("sizeof"),
+    [KW_STATIC] = create_const_string("static"),
+    [KW_STRUCT] = create_const_string("struct"),
+    [KW_SWITCH] = create_const_string("switch"),
+    [KW_TYPEDEF] = create_const_string("typedef"),
+    [KW_UNION] = create_const_string("union"),
+    [KW_UNSIGNED] = create_const_string("unsigned"),
+    [KW_VOID] = create_const_string("void"),
+    [KW_VOLATILE] = create_const_string("volatile"),
+    [KW_WHILE] = create_const_string("while"),
+    [KW__BOOL] = create_const_string("_Bool"),
+    [KW__COMPLEX] = create_const_string("_Complex"),
+    [KW__IMAGINARY] = create_const_string("_Imaginary"),
 
     // Punctuators
-    [PUN_LEFT_SQUARE_BRACKET] = "[",
-    [PUN_RIGHT_SQUARE_BRACKET] = "]",
-    [PUN_LEFT_PARENTHESIS] = "(",
-    [PUN_RIGHT_PARENTHESIS] = ")",
-    [PUN_LEFT_BRACE] = "{",
-    [PUN_RIGHT_BRACE] = "}",
-    [PUN_DOT] = ".",
-    [PUN_ARROW] = "->",
-    [PUN_INCREMENT] = "++",
-    [PUN_DECREMENT] = "--",
-    [PUN_AMPERSAND] = "&",
-    [PUN_ASTERISK] = "*",
-    [PUN_PLUS] = "+",
-    [PUN_MINUS] = "-",
-    [PUN_TILDE] = "~",
-    [PUN_EXCLAMATION_MARK] = "!",
-    [PUN_FWD_SLASH] = "/",
-    [PUN_REMAINDER] = "%",
-    [PUN_LEFT_BITSHIFT] = "<<",
-    [PUN_RIGHT_BITSHIFT] = ">>",
-    [PUN_LESS_THAN] = "<",
-    [PUN_GREATER_THAN] = ">",
-    [PUN_LESS_THAN_EQUAL] = "<=",
-    [PUN_GREATER_THAN_EQUAL] = ">=",
-    [PUN_EQUALITY] = "==",
-    [PUN_INEQUALITY] = "!=",
-    [PUN_BITWISE_XOR] = "^",
-    [PUN_BITWISE_OR] = "|",
-    [PUN_LOGICAL_AND] = "&&",
-    [PUN_LOGICAL_OR] = "||",
-    [PUN_QUESTION_MARK] = "?",
-    [PUN_COLON] = ":",
-    [PUN_SEMICOLON] = ";",
-    [PUN_ELLIPSIS] = "...",
-    [PUN_ASSIGNMENT] = "=",
-    [PUN_MULTIPLY_ASSIGNMENT] = "*=",
-    [PUN_DIVIDE_ASSIGNMENT] = "/=",
-    [PUN_MOD_ASSIGNMENT] = "%=",
-    [PUN_PLUS_ASSIGNMENT] = "+=",
-    [PUN_MINUS_ASSIGNMENT] = "-=",
-    [PUN_LEFT_BITSHIFT_ASSIGNMENT] = "<<=",
-    [PUN_RIGHT_BITSHIFT_ASSIGNMENT] = ">>=",
-    [PUN_AND_ASSIGNMENT] = "&=",
-    [PUN_XOR_ASSIGNMENT] = "^=",
-    [PUN_OR_ASSIGNMENT] = "|=",
-    [PUN_COMMA] = ",",
-    [PUN_HASH] = "#",
-    [PUN_DOUBLE_HASH] = "##",
-    [PUN_NONE] = "",
+    [PUN_LEFT_SQUARE_BRACKET] = create_const_string("["),
+    [PUN_RIGHT_SQUARE_BRACKET] = create_const_string("]"),
+    [PUN_LEFT_PARENTHESIS] = create_const_string("("),
+    [PUN_RIGHT_PARENTHESIS] = create_const_string(")"),
+    [PUN_LEFT_BRACE] = create_const_string("{"),
+    [PUN_RIGHT_BRACE] = create_const_string("}"),
+    [PUN_DOT] = create_const_string("."),
+    [PUN_ARROW] = create_const_string("->"),
+    [PUN_INCREMENT] = create_const_string("++"),
+    [PUN_DECREMENT] = create_const_string("--"),
+    [PUN_AMPERSAND] = create_const_string("&"),
+    [PUN_ASTERISK] = create_const_string("*"),
+    [PUN_PLUS] = create_const_string("+"),
+    [PUN_MINUS] = create_const_string("-"),
+    [PUN_TILDE] = create_const_string("~"),
+    [PUN_EXCLAMATION_MARK] = create_const_string("!"),
+    [PUN_FWD_SLASH] = create_const_string("/"),
+    [PUN_REMAINDER] = create_const_string("%"),
+    [PUN_LEFT_BITSHIFT] = create_const_string("<<"),
+    [PUN_RIGHT_BITSHIFT] = create_const_string(">>"),
+    [PUN_LESS_THAN] = create_const_string("<"),
+    [PUN_GREATER_THAN] = create_const_string(">"),
+    [PUN_LESS_THAN_EQUAL] = create_const_string("<="),
+    [PUN_GREATER_THAN_EQUAL] = create_const_string(">="),
+    [PUN_EQUALITY] = create_const_string("=="),
+    [PUN_INEQUALITY] = create_const_string("!="),
+    [PUN_BITWISE_XOR] = create_const_string("^"),
+    [PUN_BITWISE_OR] = create_const_string("|"),
+    [PUN_LOGICAL_AND] = create_const_string("&&"),
+    [PUN_LOGICAL_OR] = create_const_string("||"),
+    [PUN_QUESTION_MARK] = create_const_string("?"),
+    [PUN_COLON] = create_const_string(":"),
+    [PUN_SEMICOLON] = create_const_string(";"),
+    [PUN_ELLIPSIS] = create_const_string("..."),
+    [PUN_ASSIGNMENT] = create_const_string("="),
+    [PUN_MULTIPLY_ASSIGNMENT] = create_const_string("*="),
+    [PUN_DIVIDE_ASSIGNMENT] = create_const_string("/="),
+    [PUN_MOD_ASSIGNMENT] = create_const_string("%="),
+    [PUN_PLUS_ASSIGNMENT] = create_const_string("+="),
+    [PUN_MINUS_ASSIGNMENT] = create_const_string("-="),
+    [PUN_LEFT_BITSHIFT_ASSIGNMENT] = create_const_string("<<="),
+    [PUN_RIGHT_BITSHIFT_ASSIGNMENT] = create_const_string(">>="),
+    [PUN_AND_ASSIGNMENT] = create_const_string("&="),
+    [PUN_XOR_ASSIGNMENT] = create_const_string("^="),
+    [PUN_OR_ASSIGNMENT] = create_const_string("|="),
+    [PUN_COMMA] = create_const_string(","),
+    [PUN_HASH] = create_const_string("#"),
+    [PUN_DOUBLE_HASH] = create_const_string("##"),
+    [PUN_NONE] = create_const_string(""),
 
-    [CONST_INTEGER] = "",
-    [CONST_UNSIGNED_INT] = "",
-    [CONST_LONG] = "",
-    [CONST_UNSIGNED_LONG] = "",
-    [CONST_LONG_LONG] = "",
-    [CONST_UNSIGNED_LONG_LONG] = "",
-    [CONST_FLOAT] = "",
-    [CONST_DOUBLE] = "",
-    [CONST_LONG_DOUBLE] = "",
-    [CONST_CHAR] = "",
-    [CONST_WIDE_CHAR] = "",
+    [CONST_INTEGER] = create_const_string(""),
+    [CONST_UNSIGNED_INT] = create_const_string(""),
+    [CONST_LONG] = create_const_string(""),
+    [CONST_UNSIGNED_LONG] = create_const_string(""),
+    [CONST_LONG_LONG] = create_const_string(""),
+    [CONST_UNSIGNED_LONG_LONG] = create_const_string(""),
+    [CONST_FLOAT] = create_const_string(""),
+    [CONST_DOUBLE] = create_const_string(""),
+    [CONST_LONG_DOUBLE] = create_const_string(""),
+    [CONST_CHAR] = create_const_string(""),
+    [CONST_WIDE_CHAR] = create_const_string(""),
 
     // Directives
-    [DIRECTIVE_IF] = "if",
-    [DIRECTIVE_IFDEF] = "ifdef",
-    [DIRECTIVE_IFNDEF] = "ifndef",
-    [DIRECTIVE_ELIF] = "elif",
-    [DIRECTIVE_ELSE] = "else",
-    [DIRECTIVE_ENDIF] = "endif",
-    [DIRECTIVE_INCLUDE] = "include",
-    [DIRECTIVE_DEFINE] = "define",
-    [DIRECTIVE_UNDEF] = "undef",
-    [DIRECTIVE_LINE] = "line",
-    [DIRECTIVE_WARNING] = "warning",
-    [DIRECTIVE_ERROR] = "error",
-    [DIRECTIVE_PRAGMA] = "pragma",
-    [DIRECTIVE_NULL] = ""
+    [DIRECTIVE_IF] = create_const_string("if"),
+    [DIRECTIVE_IFDEF] = create_const_string("ifdef"),
+    [DIRECTIVE_IFNDEF] = create_const_string("ifndef"),
+    [DIRECTIVE_ELIF] = create_const_string("elif"),
+    [DIRECTIVE_ELSE] = create_const_string("else"),
+    [DIRECTIVE_ENDIF] = create_const_string("endif"),
+    [DIRECTIVE_INCLUDE] = create_const_string("include"),
+    [DIRECTIVE_DEFINE] = create_const_string("define"),
+    [DIRECTIVE_UNDEF] = create_const_string("undef"),
+    [DIRECTIVE_LINE] = create_const_string("line"),
+    [DIRECTIVE_WARNING] = create_const_string("warning"),
+    [DIRECTIVE_ERROR] = create_const_string("error"),
+    [DIRECTIVE_PRAGMA] = create_const_string("pragma"),
+    [DIRECTIVE_NULL] = create_const_string("")
 };
 
 #define NUM_SUBTYPES sizeof(subtype_strings) / sizeof(subtype_strings[0])
@@ -157,7 +160,7 @@ tk_node *remove_tokens(const tk_node *start, const tk_node *end) {
 
 char consume_next_char(void) {
     if (FILES_TOP.buffer.pos == FILES_TOP.buffer.size) {
-        if (escaped) error(FILES_TOP.filepath, FILES_TOP.current_line, "Lone \\");
+        if (escaped) error(&FILES_TOP.filepath, FILES_TOP.current_line, "Lone \\");
         return EOF;
     }
 
@@ -202,7 +205,7 @@ char consume_escaped_char(void) {
         case '\\': return '\\';
 
         default:
-            error(FILES_TOP.filepath, FILES_TOP.current_line, "Unexpected escape character");
+            error(&FILES_TOP.filepath, FILES_TOP.current_line, "Unexpected escape character");
             return consumed_char;
     }
 }
@@ -275,12 +278,13 @@ bool not_end_of_char_const(const char c) {
 
 // Builds up a lexeme by consuming characters until
 // a character does not satisfy the compare function
-void build_lexme(bool compare_func(char), char *lexeme) {
-    // TODO: Handle lexeme overflow
-    char *lexeme_ptr = lexeme + strlen(lexeme);
+void build_lexme(bool compare_func(char), string *lexeme, bool allocate) {
+    string *str = allocate ? &create_local_string("", MAX_LEXEME_LENGTH) : lexeme;
+    char *str_data_ptr = &str->data[str->len];
+    char overflow_char;
 
     while (compare_func(peek_next_char())) {
-        *lexeme_ptr = consume_next_char();
+        *str_data_ptr = consume_next_char();
 
         if (escaped) {
             if (peek_next_char() == '\r') {consume_next_char();}
@@ -293,31 +297,43 @@ void build_lexme(bool compare_func(char), char *lexeme) {
 
             // Skip \x, \0..\7, treat them as a normal character following a backslash
             if (peeked_char != 'x' && (peeked_char < '0' || peeked_char > '7')) {
-                *lexeme_ptr = (char) (consume_escaped_char() | 0x80);
+                *str_data_ptr = (char) (consume_escaped_char() | 0x80);
             }
         }
 
-        lexeme_ptr++;
-        *lexeme_ptr = '\0';
+        if (str->len == str->cap - 1) {
+            str_data_ptr = &overflow_char;
+        } else {
+            str_data_ptr++;
+            str->len++;
+        }
+    }
+    *str_data_ptr = '\0';
+
+    if (allocate) {
+        *lexeme = create_heap_string(str->len+1, token_arena);
+        string_copy(lexeme, str);
     }
 }
 
 void create_punctuator_token(token* new_token, const enum subtype punctuator) {
     *new_token = (token) {.type = PUNCTUATOR, .subtype = punctuator,
-                       .lexeme[0] = '\0', .line = FILES_TOP.current_line};
-
-    strcpy(new_token->lexeme, subtype_strings[punctuator]);
+                       .lexeme = subtype_strings[punctuator], .line = FILES_TOP.current_line};
 }
 
 void create_identifier_or_keyword_token(token* new_token, char c) {
-    *new_token = (token) {.lexeme[0] = c, .lexeme[1] = '\0', .line = FILES_TOP.current_line};
+    *new_token = (token) {.lexeme = {0}, .line = FILES_TOP.current_line};
 
-    build_lexme(is_alphanumeric, new_token->lexeme);
+    string tmp_str = create_local_string(c, MAX_LEXEME_LENGTH);
+    tmp_str.len++;
+
+    build_lexme(is_alphanumeric, &tmp_str, false);
 
     // Check for keyword
     for (enum subtype enum_num = 0; enum_num < NUM_SUBTYPES; enum_num++) {
-        if (strcmp(new_token->lexeme, subtype_strings[enum_num]) == 0) {
+        if (string_cmp(&tmp_str, &subtype_strings[enum_num]) == 0) {
             new_token->type = KEYWORD;
+            new_token->lexeme = subtype_strings[enum_num];
             new_token->subtype = enum_num;
 
             return;
@@ -326,15 +342,17 @@ void create_identifier_or_keyword_token(token* new_token, char c) {
 
     // If we're here, the lexeme is an identifier
     new_token->type = IDENTIFIER;
+    new_token->lexeme = create_heap_string(tmp_str.len+1, token_arena);
+    string_copy(&new_token->lexeme, &tmp_str);
 }
 
 void create_string_literal_token(token* new_token) {
     *new_token = (token) {.type = STRING_LITERAL, .line = FILES_TOP.current_line};
 
-    build_lexme(not_end_of_string, new_token->lexeme);
+    build_lexme(not_end_of_string, &new_token->lexeme, true);
 
     if (peek_next_char() == EOF) {
-        error(FILES_TOP.filepath, FILES_TOP.current_line, "Expected end of string");
+        error(&FILES_TOP.filepath, FILES_TOP.current_line, "Expected end of string");
         return;
     }
 
@@ -347,74 +365,76 @@ void create_string_literal_token(token* new_token) {
 #define SUFFIX_LL 4
 #define SUFFIX_F 8
 
-void convert_to_base_10(const size_t base, char *in_str, char *out_str) {
-    size_t len = strlen(in_str);
+void convert_to_base_10(const size_t base, string *in_str, string *out_str) {
     size_t result = 0;
     size_t digit = SIZE_MAX;
     size_t position_power = 1;
 
-    for (size_t i = len - 1; i != SIZE_MAX; i--) {
-        if (in_str[i] >= '0' && in_str[i] <= '9') digit = (size_t) in_str[i] - '0';
-        if (in_str[i] >= 'a' && in_str[i] <= 'f') digit = (size_t) in_str[i] - 'a' + 10;
-        if (in_str[i] >= 'A' && in_str[i] <= 'F') digit = (size_t) in_str[i] - 'A' + 10;
+    for (size_t i = in_str->len - 1; i != SIZE_MAX; i--) {
+        if (in_str->data[i] >= '0' && in_str->data[i] <= '9') digit = (size_t) in_str->data[i] - '0';
+        if (in_str->data[i] >= 'a' && in_str->data[i] <= 'f') digit = (size_t) in_str->data[i] - 'a' + 10;
+        if (in_str->data[i] >= 'A' && in_str->data[i] <= 'F') digit = (size_t) in_str->data[i] - 'A' + 10;
 
         if (digit == SIZE_MAX) {
-            error(FILES_TOP.filepath, FILES_TOP.current_line, "Error converting to base 10: Invalid digit");
+            error(&FILES_TOP.filepath, FILES_TOP.current_line, "Error converting to base 10: Invalid digit");
         }
 
         result += digit * position_power;
         position_power *= base;
     }
 
-    out_str[0] = '\0'; // In case in_str and out_str are the same
-
-    sprintf(out_str, "%ld", result);
+    out_str->data[0] = '\0'; // In case in_str and out_str are the same
+    out_str->len = (uint16_t) sprintf(out_str->data, "%ld", result);
 }
 
 void create_constant_token(token* new_token, const char c) {
     *new_token = (token) {.type = CONSTANT, .subtype = CONST_INTEGER,
-                          .lexeme[0] = c, .lexeme[1] = '\0', .line = FILES_TOP.current_line};
+                          .lexeme = {0}, .line = FILES_TOP.current_line};
 
     char next_char = peek_next_char();
     size_t base = 10;
 
+    string tmp_str = create_local_string(c, MAX_LEXEME_LENGTH);
+    tmp_str.len = 1;
+
     if (c == '0') {
-        new_token->lexeme[0] = '\0';
+        tmp_str.data[0] = 0;
+        tmp_str.len = 0;
 
         if ((next_char & 95) == 'X') {
             base = 16;
             consume_next_char();
 
-            build_lexme(is_hex, new_token->lexeme);
+            build_lexme(is_hex, &tmp_str, false);
         }
         else if (is_numeric(next_char)) {
             base = 8;
-            build_lexme(is_numeric, new_token->lexeme);
+            build_lexme(is_numeric, &tmp_str, false);
         }
         else {
-            new_token->lexeme[0] = '0';
-            new_token->lexeme[1] = '\0';
+            tmp_str.data[0] = '0';
+            tmp_str.len = 1;
         }
     } else {
-        build_lexme(is_numeric, new_token->lexeme);
+        build_lexme(is_numeric, &tmp_str, false);
     }
 
-    if (base != 10) convert_to_base_10(base, new_token->lexeme, new_token->lexeme);
+    if (base != 10) convert_to_base_10(base, &tmp_str, &tmp_str);
 
     next_char = peek_next_char();
 
     // Floating point constant handling
     if (next_char == '.') {
         new_token->subtype = CONST_DOUBLE;
-        strcat(new_token->lexeme, ".\0");
+        string_cat_c(&tmp_str, '.');
         consume_next_char();
 
         if (base == 10) {
-            build_lexme(is_numeric, new_token->lexeme);
+            build_lexme(is_numeric, &tmp_str, false);
         } else if (base == 16) {
-            build_lexme(is_hex, new_token->lexeme);
+            build_lexme(is_hex, &tmp_str, false);
         } else {
-            error(FILES_TOP.filepath, new_token->line, "Invalid base for floating constant");
+            error(&FILES_TOP.filepath, new_token->line, "Invalid base for floating constant");
             return;
         }
 
@@ -422,13 +442,13 @@ void create_constant_token(token* new_token, const char c) {
 
         if ((next_char & 95) == 'P') {
             if (base == 10) {
-                error(FILES_TOP.filepath, new_token->line, "Found binary exponent part in decimal floating constant");
+                error(&FILES_TOP.filepath, new_token->line, "Found binary exponent part in decimal floating constant");
                 return;
             }
 
             consume_next_char();
-            strcat(new_token->lexeme, "P");
-            build_lexme(is_numeric, new_token->lexeme);
+            string_cat_c(&tmp_str, 'P');
+            build_lexme(is_numeric, &tmp_str, false);
         }
     } else {
         new_token->subtype = CONST_INTEGER;
@@ -436,35 +456,40 @@ void create_constant_token(token* new_token, const char c) {
 
     if ((next_char & 95) == 'E') {
         if (base == 16) {
-            error(FILES_TOP.filepath, new_token->line, "Found exponent part in hexadecimal floating constant");
+            error(&FILES_TOP.filepath, new_token->line, "Found exponent part in hexadecimal floating constant");
             return;
         }
 
         consume_next_char();
-        strcat(new_token->lexeme, "E");
+        string_cat_c(&tmp_str, 'E');
 
         next_char = peek_next_char();
 
         if (next_char == '+' || next_char == '-') {
             consume_next_char();
-            strncat(new_token->lexeme, &next_char, 1);
+            string_cat_c(&tmp_str, next_char);
         }
 
-        build_lexme(is_numeric, new_token->lexeme);
+        build_lexme(is_numeric, &tmp_str, false);
     }
 
     next_char = peek_next_char();
 
     if (!is_alpha(next_char)) {
+        new_token->lexeme = create_heap_string(tmp_str.len+1, token_arena);
+        string_copy(&new_token->lexeme, &tmp_str);
         return; // No suffix
     }
 
-    char *suffix_ptr = new_token->lexeme + strlen(new_token->lexeme);
+    build_lexme(is_alpha, &tmp_str, false);
 
-    build_lexme(is_alpha, new_token->lexeme);
+    char *suffix_ptr = &tmp_str.data[tmp_str.len-1];
+
+    new_token->lexeme = create_heap_string(tmp_str.len+1, token_arena);
+    string_copy(&new_token->lexeme, &tmp_str);
 
     if (strlen(suffix_ptr) > 3) {
-        error(FILES_TOP.filepath, new_token->line, "Unknown number suffix");
+        error(&FILES_TOP.filepath, new_token->line, "Unknown number suffix");
         return;
     }
 
@@ -475,14 +500,14 @@ void create_constant_token(token* new_token, const char c) {
         *suffix_ptr &= 95;
 
         if (*suffix_ptr != 'U' && *suffix_ptr != 'L' && *suffix_ptr != 'F') {
-            error(FILES_TOP.filepath, new_token->line, "Unknown number suffix");
+            error(&FILES_TOP.filepath, new_token->line, "Unknown number suffix");
             return;
         }
 
         switch (*suffix_ptr) {
             case 'U':
                 if (*(suffix_ptr+1) == 'U') {
-                    error(FILES_TOP.filepath, new_token->line, "Unknown number suffix");
+                    error(&FILES_TOP.filepath, new_token->line, "Unknown number suffix");
                     return;
                 }
                 suffix |= SUFFIX_U;
@@ -509,14 +534,14 @@ void create_constant_token(token* new_token, const char c) {
             case SUFFIX_U | SUFFIX_LL: new_token->subtype = CONST_UNSIGNED_LONG_LONG; break;
             case SUFFIX_F: new_token->subtype = CONST_FLOAT; break;
 
-            default: error(FILES_TOP.filepath, new_token->line, "Unknown integer suffix"); break;
+            default: error(&FILES_TOP.filepath, new_token->line, "Unknown integer suffix"); break;
         }
     }
     else if (new_token->subtype == CONST_DOUBLE) {
         switch (suffix) {
             case SUFFIX_F: new_token->subtype = CONST_FLOAT; break;
             case SUFFIX_L: new_token->subtype = CONST_LONG_DOUBLE; break;
-            default: error(FILES_TOP.filepath, new_token->line, "Unknown integer suffix"); break;
+            default: error(&FILES_TOP.filepath, new_token->line, "Unknown integer suffix"); break;
         }
     }
 }
@@ -528,10 +553,10 @@ void create_character_token(token* new_token, bool wide) {
 
     if (wide) {consume_next_char();} // Consume the starting '
 
-    build_lexme(not_end_of_char_const, new_token->lexeme);
+    build_lexme(not_end_of_char_const, &new_token->lexeme, true);
 
     if (peek_next_char() != '\'') {
-        error(FILES_TOP.filepath, new_token->line, "Expected \'");
+        error(&FILES_TOP.filepath, new_token->line, "Expected \'");
     }
 
     consume_next_char(); // Consume the ending '
@@ -540,13 +565,13 @@ void create_character_token(token* new_token, bool wide) {
 void create_directive_token(token* new_token) {
     consume_whitespace();
 
-    *new_token = (token) {.type = DIRECTIVE, .lexeme[0] = '\0', .line = FILES_TOP.current_line};
+    *new_token = (token) {.type = DIRECTIVE, .lexeme = {0}, .line = FILES_TOP.current_line};
 
-    build_lexme(is_alpha, new_token->lexeme);
+    build_lexme(is_alpha, &new_token->lexeme, true);
 
     // Check for directive
     for (enum subtype enum_num = DIRECTIVE_IF; enum_num < NUM_SUBTYPES; enum_num++) {
-        if (strcmp(new_token->lexeme, subtype_strings[enum_num]) == 0) {
+        if (string_cmp(&new_token->lexeme, &subtype_strings[enum_num]) == 0) {
             new_token->subtype = enum_num;
 
             in_include = (new_token->subtype == DIRECTIVE_INCLUDE);
@@ -556,24 +581,24 @@ void create_directive_token(token* new_token) {
         }
     }
 
-    error(FILES_TOP.filepath, FILES_TOP.current_line, "Unknown directive");
+    error(&FILES_TOP.filepath, FILES_TOP.current_line, "Unknown directive");
 }
 
 void create_header_token(token *new_token, header_type type) {
     consume_whitespace();
 
-    *new_token = (token) {.type = HEADER_NAME, .lexeme[0] = '\0', .line = FILES_TOP.current_line};
+    *new_token = (token) {.type = HEADER_NAME, .lexeme = {0}, .line = FILES_TOP.current_line};
 
     switch (type) {
         case H_HEADER:
-            build_lexme(is_h_header_char, new_token->lexeme);
+            build_lexme(is_h_header_char, &new_token->lexeme, true);
             consume_whitespace();
             consume_next_char(); // Consume the ending `>`
 
             new_token->subtype = HEADER_H;
             break;
         case Q_HEADER:
-            build_lexme(is_q_header_char, new_token->lexeme);
+            build_lexme(is_q_header_char, &new_token->lexeme, true);
             consume_next_char(); // Consume the ending `"`
 
             new_token->subtype = HEADER_Q;
@@ -586,17 +611,17 @@ void create_header_token(token *new_token, header_type type) {
 void create_newline_token(token *new_token) {
     // FILES_TOP.current_line was incremented when the newline was read,
     // so -1 to get the actual line the newline is on
-    *new_token = (token) {.type = NEWLINE, .lexeme[0] = '\n', .line = FILES_TOP.current_line-1};
+    *new_token = (token) {.type = NEWLINE, .lexeme = newline_string, .line = FILES_TOP.current_line-1};
 
     in_define = false;
 }
 
 void create_blank_token(token *new_token) {
-    *new_token = (token) {.type = BLANK, .lexeme[0] = '\0', .line = FILES_TOP.current_line};
+    *new_token = (token) {.type = BLANK, .lexeme = {0}, .line = FILES_TOP.current_line};
 }
 
 void create_end_token(token *new_token) {
-    *new_token = (token) {.type = END, .lexeme[0] = '\0', .line = FILES_TOP.current_line};
+    *new_token = (token) {.type = END, .lexeme = {0}, .line = FILES_TOP.current_line};
 }
 
 token scan_token(void) {
@@ -684,7 +709,7 @@ token scan_token(void) {
                         }
                     }
                     break;
-                    case '=': create_punctuator_token(&new_token, PUN_DIVIDE_ASSIGNMENT); break;
+                    case '=': create_punctuator_token(&new_token, PUN_DIVIDE_ASSIGNMENT); consume_next_char(); break;
 
                     default: create_punctuator_token(&new_token, PUN_FWD_SLASH); break;
                 }
@@ -817,11 +842,12 @@ token scan_token(void) {
             // End of file
             case EOF:
                 create_end_token(&new_token);
+                new_token.src_filepath = create_heap_string(MAX_FILEPATH_LENGTH, token_arena);
 
-                strcpy(new_token.src_filepath, FILES_TOP.filepath);
-                r_slash_ptr = strrchr(new_token.src_filepath, '/');
+                string_copy(&new_token.src_filepath, &FILES_TOP.filepath);
+                r_slash_ptr = string_rstr(&new_token.src_filepath, '/').data;
                 if (r_slash_ptr != NULL) {
-                    new_token.filename_index = r_slash_ptr - new_token.src_filepath + 1;
+                    new_token.filename_index = (uint16_t) (r_slash_ptr - new_token.src_filepath.data + 1);
                 }
 
                 free(FILES_TOP.buffer.data);
@@ -844,17 +870,18 @@ token scan_token(void) {
                     create_identifier_or_keyword_token(&new_token, c);
                 }
                 else {
-                    error(FILES_TOP.filepath, FILES_TOP.current_line, "Unknown token");
+                    error(&FILES_TOP.filepath, FILES_TOP.current_line, "Unknown token");
                 }
         }
     }
 
     new_token.follows_whitespace = follows_whitespace;
+    new_token.src_filepath = create_heap_string(FILES_TOP.filepath.len+1, token_arena);
 
-    strcpy(new_token.src_filepath, FILES_TOP.filepath);
-    r_slash_ptr = strrchr(new_token.src_filepath, '/');
+    string_copy(&new_token.src_filepath, &FILES_TOP.filepath);
+    r_slash_ptr = string_rstr(&new_token.src_filepath, '/').data;
     if (r_slash_ptr != NULL) {
-        new_token.filename_index = r_slash_ptr - new_token.src_filepath + 1;
+        new_token.filename_index = (uint16_t) (r_slash_ptr - new_token.src_filepath.data + 1);
     }
 
     return new_token;
@@ -870,8 +897,13 @@ void scan_and_insert_tokens(tk_node *insert_point) {
     }
 }
 
-bool add_file(const char *file_path) {
-    FILE *file_stream = fopen(file_path, "rb");
+bool add_file(const string *file_path) {
+    char file_path_cstr[MAX_LEXEME_LENGTH];
+
+    strcpy(file_path_cstr, file_path->data);
+    file_path_cstr[file_path->len] = 0;
+
+    FILE *file_stream = fopen(file_path_cstr, "rb");
     size_t file_size;
 
     if (file_stream == NULL) {
@@ -883,11 +915,14 @@ bool add_file(const char *file_path) {
     rewind(file_stream);
 
     files[++files_top] = (file_info) {.buffer = {.size = file_size, .pos = 0},
-                                                   .current_pos = 0, .current_line = 1};
+                                      .filepath = {.cap = file_path->cap, file_path->len},
+                                      .current_pos = 0, .current_line = 1};
+
     files[files_top].buffer.data = malloc(file_size);
+    files[files_top].filepath.data = malloc(file_path->cap);
 
     fread(FILES_TOP.buffer.data, 1, file_size, file_stream);
-    strcpy(files[files_top].filepath, file_path);
+    string_copy(&files[files_top].filepath, file_path);
 
     fclose(file_stream);
 
