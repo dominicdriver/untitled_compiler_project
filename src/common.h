@@ -10,7 +10,7 @@
 
 #define MAX_PARAMETERS 8
 #define MAX_PARAMETER_LENGTH 32
-#define MAX_NUM_MACROS 16384
+#define MAX_NUM_MACROS 32768
 #define MAX_NUM_FILES 512
 
 #define TOKEN_ARENA_MAX_SIZE sizeof(tk_node) * (1 << 20)
@@ -83,7 +83,6 @@ extern int files_top;
 
 
 // Defined in preprocessor:
-extern macro macros[MAX_NUM_MACROS];
 extern size_t num_macros;
 
 extern bool in_define;
@@ -94,7 +93,7 @@ void scan_and_insert_tokens(tk_node *insert_point);
 void process_preprocessing_tokens(tk_node *token_node);
 void expand_macro_tokens(tk_node *token_node);
 
-macro *macro_exists(tk_node *token_node);
+const macro *macro_exists(tk_node *token_node);
 tk_node *remove_tokens(const tk_node *start, const tk_node *end);
 tk_list_segment expand_macro(tk_node *token_node);
 

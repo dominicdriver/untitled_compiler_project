@@ -3,6 +3,8 @@
 #include "enums.h"
 #include "memory.h"
 
+#include <string.h>
+
 #include <stdint.h>
 #include <stdio.h>
 
@@ -128,7 +130,7 @@ uint64_t hash(const string *str) {
         return complete_hash;
     }
 
-    while (data != &str->data[str->len]) {
+    while (*data && data != &str->data[str->len]) {
         uint64_t current_hash = 0;
         for (uint8_t i = 0; i < 64 && *data; i+=8) {
             current_hash |= ((uint64_t)(*data++) << i);

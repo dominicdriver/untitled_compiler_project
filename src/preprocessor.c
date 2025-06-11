@@ -12,15 +12,20 @@
 
 #include "debug.h"
 #include "memory.h"
+#include "hash_table.h"
 #include "helper_functions.h"
 #include "strings.h"
+
+#define MEMORY_ARENA_MAX_SIZE ((sizeof(ht) + sizeof(ht_entry) * MAX_NUM_MACROS) + sizeof(macro) * MAX_NUM_MACROS)
 
 bool in_define = 0;
 bool in_include = 0;
 
-macro macros[MAX_NUM_MACROS];
+ht *macro_hash_table;
 size_t num_macros = 0;
 size_t max_macros = 0;
+
+memory_arena *macro_arena;
 
 // Some commonly used strings
 static string one_string = create_const_string("1");
@@ -58,15 +63,19 @@ bool macros_equal(const macro *macro_one, const macro *macro_two) {
 }
 
 void add_macro(const macro new_macro) {
-    for (size_t i = 0; i < num_macros; i++) {
-        if (new_macro.hash == macros[i].hash && string_cmp(&new_macro.name, &macros[i].name) == 0) {
-            if (!macros_equal(&new_macro, &macros[i])) {
-                error(current_src_file, current_line, "Duplicate macro");
-            }
-            return;
+    const macro* ht_entry = ht_get(macro_hash_table, &new_macro.name);
+
+    if (ht_entry != NULL) {
+        if (!macros_equal(&new_macro, ht_entry)) {
+            error(current_src_file, current_line, "Duplicate macro");
         }
+        return;
     }
-    macros[num_macros++] = new_macro;
+
+    macro *new_entry = allocate_from_arena(macro_arena, sizeof(macro));
+    *new_entry = new_macro;
+
+    ht_add(macro_hash_table, new_entry, &new_entry->name);
 
     if (num_macros > max_macros)
     {
@@ -74,51 +83,24 @@ void add_macro(const macro new_macro) {
     }
 }
 
-void remove_macro(const string* macro_name) {
-    uint64_t macro_name_hash = hash(macro_name);
-    for (size_t i = 0; i < num_macros; i++) {
-        if (macros[i].hash == macro_name_hash && string_cmp(&macros[i].name, macro_name) == 0) {
-            macros[i] = (macro) {0};
-
-            // Shift all elements left to remove the gap
-            memmove(&macros[i], &macros[i+1], (num_macros-i-1) * sizeof(macro));
-
-            num_macros--;
-            break;
-        }
-    }
+void remove_macro(const string *macro_name) {
+    ht_remove(macro_hash_table, macro_name);
+    return;
 }
 
-macro *macro_exists(tk_node *token_node) {
-    string *identifier = &token_node->token.lexeme;
-    tk_node *next_tk_node = token_node->next;
-
-    uint64_t identifier_hash = hash(identifier);
-    bool function_like = (next_tk_node != NULL && next_tk_node->token.subtype == PUN_LEFT_PARENTHESIS);
-
-    // func_like | macro_func_like | c
-    // 0         | 0               | 1
-    // 0         | 1               | 0
-    // 1         | 0               | 1
-    // 1         | 1               | 1
-
-    for (size_t i = 0; i < num_macros; i++) {
-        if (identifier_hash == macros[i].hash) {
-        if (string_cmp(identifier, &macros[i].name) == 0 && (function_like | !macros[i].is_function_like)) {
-            return &macros[i];
-        }
-        }
-    }
-
-    return NULL;
+const macro *macro_exists(tk_node *token_node) {
+    return ht_get(macro_hash_table, &token_node->token.lexeme);
 }
 
 void handle_include_directive(tk_node *token_node) {
     // token_node points to the include token
 
     // TODO: Use own standard library
-    const string include_dirs[] = {create_const_string("/usr/include/"),
-                                   create_const_string("/usr/local/include/")};
+    const string include_dirs[] = {create_const_string("./standard_library_ready/"),
+                                   create_const_string("/usr/local/lib/clang/21/include/"),
+                                   create_const_string("/usr/local/include/"),
+                                   create_const_string("/usr/include/x86_64-linux-gnu/"),
+                                   create_const_string("/usr/include/")};
 
     string header_path = create_local_string("", MAX_LEXEME_LENGTH);
 
@@ -522,7 +504,7 @@ tk_list_segment substitute_argument(tk_node *arg_tk_ptr, const macro *replacemen
     arg_tk_ptr->token = arguments[param_index][0];
     arg_tk_ptr->token.line = token_line;
 
-    string_copy(&arg_tk_ptr->token.src_filepath, &token_source_file);
+    arg_tk_ptr->token.src_filepath = token_source_file;
     arg_tk_ptr->token.filename_index = token_filename_index;
 
     // While still more argument tokens, add them to the token list
@@ -593,7 +575,7 @@ tk_node *consume_argument(tk_node *token_node, token *argument_tokens) {
 
 // stringify_argument will find the correct parameter, combine the lexemes of all tokens
 // in the argument, taking into account the whitespace between them.
-token stringify_argument(const string *parameter_name, macro *replacement_macro, token arguments[8][32]) {
+token stringify_argument(const string *parameter_name, const macro *replacement_macro, token arguments[8][32]) {
     token stringified_token = {.type = STRING_LITERAL, .lexeme = {0}, .line = current_line};
     short param_index = -1;
     uint32_t required_lexeme_length = 0;
@@ -634,7 +616,7 @@ token stringify_argument(const string *parameter_name, macro *replacement_macro,
 }
 
 tk_list_segment expand_macro(tk_node *token_node) {
-    macro *replacement_macro = NULL;
+    const macro *replacement_macro = NULL;
     token arguments[8][32] = {0};
 
      tk_list_segment macro_expanded_segment = {NULL, NULL, 0};
@@ -669,6 +651,7 @@ tk_list_segment expand_macro(tk_node *token_node) {
         if (macro_expanded_segment.start == NULL) {
             macro_expanded_segment.start = allocate_from_arena(token_arena, sizeof(tk_node));
             new_entry = macro_expanded_segment.start;
+            *new_entry = (tk_node) {0};
         } else if (new_entry->token.line != 0) { // If new_entry is "something", reuse it as it isn't included
             new_entry->next = allocate_from_arena(token_arena, sizeof(tk_node));
             *new_entry->next = (tk_node) {0};
@@ -779,7 +762,9 @@ tk_list_segment expand_macro(tk_node *token_node) {
         // -------------------------
         if (first_arg_sub != NULL) {
             for (tk_node *ptr = first_arg_sub; ptr != NULL; ptr = advance_list(ptr, 1)) {
-                macro *potential_macro = macro_exists(ptr);
+                if (ptr->token.type == BLANK) continue;
+
+                const macro *potential_macro = macro_exists(ptr);
 
                 if (potential_macro && !ptr->token.irreplaceable) {
                     // Expand any remaining argument tokens
@@ -847,7 +832,7 @@ tk_list_segment expand_macro(tk_node *token_node) {
     for (tk_node * sub_tk_ptr = macro_expanded_segment.start; sub_tk_ptr != NULL;
          sub_tk_ptr = advance_list(sub_tk_ptr, 1)) {
 
-        macro *potential_macro = macro_exists(sub_tk_ptr);
+        const macro *potential_macro = macro_exists(sub_tk_ptr);
         if (potential_macro != NULL && !sub_tk_ptr->token.irreplaceable) {
             tk_list_segment sub_macro_segment = expand_macro(sub_tk_ptr);
 
@@ -889,6 +874,9 @@ tk_list_segment expand_macro(tk_node *token_node) {
 void process_preprocessing_tokens(tk_node *token_node) {
     tk_node* ptr = token_node;
     tk_node* before_directive = NULL;
+
+    macro_arena = create_arena(MEMORY_ARENA_MAX_SIZE);
+    macro_hash_table = ht_alloc(MAX_NUM_MACROS, macro_arena);
 
     while(ptr->next != NULL) {
         current_src_file = &ptr->token.src_filepath;
@@ -993,4 +981,5 @@ void process_preprocessing_tokens(tk_node *token_node) {
         ptr = before_directive;
     }
 
+    delete_arena(macro_arena);
 }

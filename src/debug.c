@@ -1,10 +1,14 @@
 #include "common.h"
 #include "enums.h"
+#include "hash_table.h"
 #include "helper_functions.h"
+#include "strings.h"
 #include "debug.h"
 
 #include <stdio.h>
 #include <string.h>
+
+extern ht *macro_hash_table;
 
 void print_token(token token) {
     char token_type[16];
@@ -81,23 +85,11 @@ void print_list_segment(tk_list_segment segment) {
     printf("\n");
 }
 
-macro *macro_exists_2(const char *identifier, bool function_like) {
+const macro *macro_exists_2(const char *identifier/*, bool function_like*/) {
     string identifier_str = {.data = (char*) identifier, .cap = MAX_LEXEME_LENGTH,
                              .len = (uint16_t) strlen(identifier)};
 
-    uint64_t identifier_hash = hash(&identifier_str);
-    for (size_t i = 0; i < num_macros; i++) {
-        if (identifier_hash == macros[i].hash) {
-            if (string_cmp(&identifier_str, &macros[i].name) != 0)
-            printf("QA\n");
-        if (
-            macros[i].is_function_like == function_like) {
-            return &macros[i];
-        }
-        }
-    }
-
-    return NULL;
+    return ht_get(macro_hash_table, &identifier_str);
 }
 
 void print_replacement_tokens(token *replacement)
