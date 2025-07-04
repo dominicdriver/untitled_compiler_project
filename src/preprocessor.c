@@ -2,6 +2,7 @@
 #include "common.h"
 #include "preprocessor.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -89,6 +90,9 @@ void remove_macro(const string *macro_name) {
 }
 
 const macro *macro_exists(tk_node *token_node) {
+    if (token_node->token.type != IDENTIFIER) {
+        return NULL;
+    }
     return ht_get(macro_hash_table, &token_node->token.lexeme);
 }
 
@@ -246,6 +250,9 @@ void handle_defined(tk_node *token_node) {
     else {
         token_node->token.lexeme = zero_string;
     }
+
+    token_node->token.type = CONSTANT;
+    token_node->token.subtype = CONST_INTEGER;
 
     before_defined->next = token_node;
 
@@ -424,11 +431,8 @@ void handle_if_directives(tk_node *token_node, enum subtype if_type) {
                 if (string_cmp(&ptr->token.lexeme, &defined_string) != 0 && macro_exists(ptr->next)) {
                     tk_list_segment expanded_macro_segment = expand_macro(ptr->next);
 
-                    ptr->next = advance_list(ptr, 2); // Remove the macro identifier
-
-                    insert_list_segment(ptr, expanded_macro_segment);
-
-                    ptr = advance_list(ptr, expanded_macro_segment.len); // Move to the end of the expanded macro
+                    // Move to the end of the expanded macro
+                    ptr = advance_list(ptr, expanded_macro_segment.len);
                 } else {
                     ptr = advance_list(ptr, 1);
                 }
@@ -546,7 +550,7 @@ tk_node *consume_argument(tk_node *token_node, token *argument_tokens) {
 
     if (token_node->token.subtype == PUN_COMMA ||
         token_node->token.subtype == PUN_RIGHT_PARENTHESIS) { // Empty argument
-        *argument_tokens = (token) {.type = BLANK, .lexeme = {0}, .line = token_node->token.line, // TODO: setting lexeme to NULL here might be invalid and crash
+        *argument_tokens = (token) {.type = BLANK, .lexeme = {0}, .line = token_node->token.line,
                                     .filename_index = token_node->token.filename_index};
 
         argument_tokens->src_filepath = token_node->token.src_filepath;
@@ -620,11 +624,10 @@ tk_list_segment expand_macro(tk_node *token_node) {
     token arguments[8][32] = {0};
 
      tk_list_segment macro_expanded_segment = {NULL, NULL, 0};
+    tk_node *end_entry = token_node->next;
 
-    if ((replacement_macro = macro_exists(token_node)) == NULL) {
-        error(&token_node->token.src_filepath, token_node->token.line, "Expected macro");
-        return (tk_list_segment) {NULL, NULL, 0};
-    }
+    replacement_macro = macro_exists(token_node);
+    assert(replacement_macro != NULL);
 
     if (replacement_macro->is_function_like) {
         tk_node *arg_ptr = advance_list(token_node, 2); // Set to after the opening parenthesis
@@ -640,6 +643,7 @@ tk_list_segment expand_macro(tk_node *token_node) {
         }
 
         remove_from_list(token_node, advance_list(token_node, 1), arg_ptr);
+        end_entry = arg_ptr;
     }
 
     const token *replacement_tk_ptr = replacement_macro->replacement;
@@ -647,11 +651,10 @@ tk_list_segment expand_macro(tk_node *token_node) {
     tk_node *new_entry = NULL;
 
     while (replacement_tk_ptr->line != 0) {
-
         if (macro_expanded_segment.start == NULL) {
-            macro_expanded_segment.start = allocate_from_arena(token_arena, sizeof(tk_node));
+            macro_expanded_segment.start = token_node;
             new_entry = macro_expanded_segment.start;
-            *new_entry = (tk_node) {0};
+            *new_entry = (tk_node) {.next = new_entry->next};
         } else if (new_entry->token.line != 0) { // If new_entry is "something", reuse it as it isn't included
             new_entry->next = allocate_from_arena(token_arena, sizeof(tk_node));
             *new_entry->next = (tk_node) {0};
@@ -709,6 +712,8 @@ tk_list_segment expand_macro(tk_node *token_node) {
             return (tk_list_segment) {0};
         }
 
+        bool concatenated = false;
+
         // Checks if the next replacement token is a ##
         // no +1 since the ptr is already incremented
         while (replacement_tk_ptr->subtype == PUN_DOUBLE_HASH) {
@@ -717,6 +722,8 @@ tk_list_segment expand_macro(tk_node *token_node) {
                 error(&token_node->token.src_filepath, token_node->token.line, "Found ## at end of replacement list");
                 return (tk_list_segment) {0};
             }
+
+            concatenated = true;
 
             // new_entry contains the token to the left of the ##
 
@@ -761,8 +768,8 @@ tk_list_segment expand_macro(tk_node *token_node) {
         // Expand substituted tokens
         // -------------------------
         if (first_arg_sub != NULL) {
-            for (tk_node *ptr = first_arg_sub; ptr != NULL; ptr = advance_list(ptr, 1)) {
-                if (ptr->token.type == BLANK) continue;
+            for (tk_node *ptr = first_arg_sub; ptr != end_entry && ptr != NULL; ptr = advance_list(ptr, 1)) {
+                if (ptr->token.type == BLANK || (ptr == first_arg_sub && concatenated)) continue;
 
                 const macro *potential_macro = macro_exists(ptr);
 
@@ -780,7 +787,7 @@ tk_list_segment expand_macro(tk_node *token_node) {
                         arg_sub_segment.len = 0;
 
                         // Only need to loop through if the new length is > 0
-                        if (len_ptr != NULL) {
+                        if (len_ptr != NULL && len_ptr != end_entry) {
                             for (;len_ptr->next != NULL; len_ptr = advance_list(len_ptr, 1)) {
                                 arg_sub_segment.len++;
                             }
@@ -799,15 +806,7 @@ tk_list_segment expand_macro(tk_node *token_node) {
 
                         macro_expanded_segment.len -= (old_len - arg_sub_segment.len);
                     }
-
-                    if (arg_macro_segment.len > 0) {
-
-                        ptr->token = arg_macro_segment.start->token;
-
-                        arg_macro_segment.end->next = ptr->next;
-                        ptr->next = arg_macro_segment.start->next;
-                        ptr = arg_macro_segment.end;
-
+                    else if (arg_macro_segment.len > 0) {
                         macro_expanded_segment.len += arg_macro_segment.len - 1;
                         arg_sub_segment.len += arg_macro_segment.len - 1;
                     }
@@ -822,41 +821,36 @@ tk_list_segment expand_macro(tk_node *token_node) {
 
             // Sanity check that new_entry is at the end of the list
             assert(new_entry != NULL);
-            assert(new_entry->next == NULL);
+            assert(new_entry->next == NULL || new_entry->next == end_entry);
         }
         // -------------------------
     }
 
+    if (macro_expanded_segment.start == NULL) {
+        macro_expanded_segment.start = token_node;
+        macro_expanded_segment.start->token.type = BLANK;
+        macro_expanded_segment.start->token.lexeme = (string) {0};
+    } else {
+        new_entry->next = end_entry;
+    }
+
     // Rescan and expansion
     // --------------------
-    for (tk_node * sub_tk_ptr = macro_expanded_segment.start; sub_tk_ptr != NULL;
+    for (tk_node * sub_tk_ptr = macro_expanded_segment.start; sub_tk_ptr != NULL && sub_tk_ptr != end_entry;
          sub_tk_ptr = advance_list(sub_tk_ptr, 1)) {
 
         const macro *potential_macro = macro_exists(sub_tk_ptr);
         if (potential_macro != NULL && !sub_tk_ptr->token.irreplaceable) {
-            tk_list_segment sub_macro_segment = expand_macro(sub_tk_ptr);
+            expand_macro(sub_tk_ptr);
 
             // If function-like, need to re-evaluate length,
             // as argument tokens will have been removed
             if (potential_macro->is_function_like) {
                 macro_expanded_segment.len = 0;
-                for (tk_node *len_ptr = macro_expanded_segment.start; len_ptr != NULL;
+                for (tk_node *len_ptr = macro_expanded_segment.start; len_ptr != NULL && len_ptr != end_entry;
                      len_ptr = advance_list(len_ptr, 1)) {
                         macro_expanded_segment.len++;
                 }
-            }
-
-            if (sub_macro_segment.len > 0) {
-                sub_tk_ptr->token = sub_macro_segment.start->token;
-
-                sub_macro_segment.end->next = sub_tk_ptr->next;
-                sub_tk_ptr->next = sub_macro_segment.start->next;
-                sub_tk_ptr = sub_macro_segment.end;
-
-                macro_expanded_segment.len += sub_macro_segment.len - 1;
-            } else {
-                sub_tk_ptr->token.type = BLANK;
-                sub_tk_ptr->token.lexeme = (string) {0};
             }
         }
     }
@@ -887,11 +881,6 @@ void process_preprocessing_tokens(tk_node *token_node) {
 
             if (macro_exists(ptr->next)) {
                 tk_list_segment expanded_macro_segment = expand_macro(ptr->next);
-
-                // Remove the macro identifier
-                ptr->next = advance_list(ptr, 2);
-
-                insert_list_segment(ptr, expanded_macro_segment);
 
                 // Move to end of expanded macro
                 ptr = advance_list(ptr, expanded_macro_segment.len);
@@ -928,11 +917,6 @@ void process_preprocessing_tokens(tk_node *token_node) {
                 directive->token.subtype != DIRECTIVE_UNDEF && directive->token.subtype != DIRECTIVE_DEFINE &&
                 directive->token.subtype != DIRECTIVE_IFDEF && directive->token.subtype != DIRECTIVE_IFNDEF) {
                 tk_list_segment expanded_macro_segment = expand_macro(ptr->next);
-
-                // Remove the macro identifier
-                ptr->next = advance_list(ptr, 2);
-
-                insert_list_segment(ptr, expanded_macro_segment);
 
                 // Move to the end of the expanded macro
                 ptr = advance_list(ptr, expanded_macro_segment.len);
