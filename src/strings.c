@@ -56,9 +56,9 @@ int16_t string_cmp(const string *s1, const string *s2) {
 }
 
 bool string_copy(string *dest, const string *src) {
-    if (dest->cap < src->len) {
-        assert(0);
-    }
+    assert(dest->cap > src->len);
+    assert(dest->data != NULL);
+    assert(src->data != NULL);
 
     dest->len = src->len;
 

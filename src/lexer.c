@@ -1,5 +1,6 @@
-#include "enums.h"
+#include "lexer.h"
 #include "common.h"
+#include "enums.h"
 #include "strings.h"
 #include "lexer.h"
 
@@ -18,6 +19,7 @@ int files_top = -1;
 bool escaped;
 
 static string newline_string = create_const_string("\n");
+static string empty_string = create_const_string("");
 
 // Maps subtype enums to their string representation
 const string subtype_strings[] = {
@@ -617,11 +619,11 @@ void create_newline_token(token *new_token) {
 }
 
 void create_blank_token(token *new_token) {
-    *new_token = (token) {.type = BLANK, .lexeme = {0}, .line = FILES_TOP.current_line};
+    *new_token = (token) {.type = BLANK, .lexeme = empty_string, .line = FILES_TOP.current_line};
 }
 
 void create_end_token(token *new_token) {
-    *new_token = (token) {.type = END, .lexeme = {0}, .line = FILES_TOP.current_line};
+    *new_token = (token) {.type = END, .lexeme = empty_string, .line = FILES_TOP.current_line};
 }
 
 token scan_token(void) {

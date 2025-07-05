@@ -93,6 +93,7 @@ const macro *macro_exists(tk_node *token_node) {
     if (token_node->token.type != IDENTIFIER) {
         return NULL;
     }
+
     return ht_get(macro_hash_table, &token_node->token.lexeme);
 }
 
@@ -240,9 +241,6 @@ void handle_defined(tk_node *token_node) {
         before_defined->next->next = token_node;
         remove_right_parenthesis = true;
     }
-
-    token_node->token.type = CONSTANT;
-    token_node->token.subtype = CONST_INTEGER;
 
     if (macro_exists(token_node)) {
         token_node->token.lexeme = one_string;
@@ -623,7 +621,7 @@ tk_list_segment expand_macro(tk_node *token_node) {
     const macro *replacement_macro = NULL;
     token arguments[8][32] = {0};
 
-     tk_list_segment macro_expanded_segment = {NULL, NULL, 0};
+    tk_list_segment macro_expanded_segment = {NULL, NULL, 0};
     tk_node *end_entry = token_node->next;
 
     replacement_macro = macro_exists(token_node);
@@ -870,7 +868,7 @@ void process_preprocessing_tokens(tk_node *token_node) {
     tk_node* before_directive = NULL;
 
     macro_arena = create_arena(MEMORY_ARENA_MAX_SIZE);
-    macro_hash_table = ht_alloc(MAX_NUM_MACROS, macro_arena);
+    macro_hash_table = ht_alloc(MAX_NUM_MACROS, ht_compare_strcmp, macro_arena);
 
     while(ptr->next != NULL) {
         current_src_file = &ptr->token.src_filepath;

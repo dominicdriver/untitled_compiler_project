@@ -12,8 +12,9 @@
 #define MAX_PARAMETER_LENGTH 32
 #define MAX_NUM_MACROS 32768
 #define MAX_NUM_FILES 512
+#define MAX_TOKENS (1 << 20)
 
-#define TOKEN_ARENA_MAX_SIZE sizeof(tk_node) * (1 << 20)
+#define TOKEN_ARENA_MAX_SIZE sizeof(tk_node) * MAX_TOKENS
 
 #define FILES_TOP files[files_top]
 
